@@ -57,6 +57,7 @@ model User {
   emailVerified DateTime?
   image         String?
   role          UserRole  @default(CUSTOMER)
+  passwordHash  String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -101,7 +102,7 @@ model Carrier {
 }
 
 // ============================================================
-// STAFF PROFILE (admins, dispatchers, warehouse managers)
+// STAFF PROFILE
 // ============================================================
 
 model Staff {
@@ -124,29 +125,29 @@ model Staff {
 // ============================================================
 
 model Driver {
-  id                String       @id @default(cuid())
-  userId            String       @unique
-  carrierId         String
-  fullName          String
-  phone             String
-  licenseNumber     String
-  licenseExpiresAt  DateTime
-  licenseClasses    String[]
-  status            DriverStatus @default(OFF_DUTY)
-  rating            Float?
-  totalDeliveries   Int          @default(0)
-  isActive          Boolean      @default(true)
-  avatar            String?
-  bio               String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id               String       @id @default(cuid())
+  userId           String       @unique
+  carrierId        String
+  vehicleId        String?
+  fullName         String
+  phone            String
+  licenseNumber    String
+  licenseExpiresAt DateTime
+  licenseClasses   String[]
+  status           DriverStatus @default(OFF_DUTY)
+  rating           Float?
+  totalDeliveries  Int          @default(0)
+  isActive         Boolean      @default(true)
+  avatar           String?
+  bio              String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  carrier  Carrier   @relation(fields: [carrierId], references: [id])
-  vehicle  Vehicle?  @relation(fields: [vehicleId], references: [id])
-  vehicleId String?
-  routes   Route[]
-  shifts   DriverShift[]
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  carrier Carrier     @relation(fields: [carrierId], references: [id])
+  vehicle Vehicle?    @relation(fields: [vehicleId], references: [id])
+  routes  Route[]
+  shifts  DriverShift[]
 }
 
 enum DriverStatus {
@@ -162,25 +163,25 @@ enum DriverStatus {
 // ============================================================
 
 model Customer {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  fullName     String
-  phone        String?
-  address      Json?
-  city         String?
-  country      String   @default("ZA")
-  avatar       String?
-  bio          String?
-  totalOrders  Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  fullName    String
+  phone       String?
+  address     Json?
+  city        String?
+  country     String   @default("ZA")
+  avatar      String?
+  bio         String?
+  totalOrders Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders Order[]
 }
 
 // ============================================================
-// HUBS (depots, warehouses, sorting centers)
+// HUBS
 // ============================================================
 
 model Hub {
@@ -195,9 +196,9 @@ model Hub {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  carrier   Carrier    @relation(fields: [carrierId], references: [id])
-  vehicles  Vehicle[]
-  routes    Route[]
+  carrier  Carrier   @relation(fields: [carrierId], references: [id])
+  vehicles Vehicle[]
+  routes   Route[]
 
   @@unique([carrierId, code])
 }
@@ -257,25 +258,25 @@ enum VehicleStatus {
 // ============================================================
 
 model Order {
-  id              String      @id @default(cuid())
-  carrierId       String
-  customerId      String
-  trackingNumber  String      @unique
-  status          OrderStatus @default(PENDING)
-  serviceLevel    String      @default("STANDARD")
-  origin          Json
-  destination     Json
-  recipientName   String
-  recipientPhone  String
-  recipientEmail  String?
-  weightKg        Float?
-  notes           String?
-  declaredValue   Decimal?    @db.Decimal(12, 2)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id             String      @id @default(cuid())
+  carrierId      String
+  customerId     String
+  trackingNumber String      @unique
+  status         OrderStatus @default(PENDING)
+  serviceLevel   String      @default("STANDARD")
+  origin         Json
+  destination    Json
+  recipientName  String
+  recipientPhone String
+  recipientEmail String?
+  weightKg       Float?
+  notes          String?
+  declaredValue  Decimal?    @db.Decimal(12, 2)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  carrier   Carrier   @relation(fields: [carrierId], references: [id])
-  customer  Customer  @relation(fields: [customerId], references: [id])
+  carrier   Carrier    @relation(fields: [carrierId], references: [id])
+  customer  Customer   @relation(fields: [customerId], references: [id])
   shipments Shipment[]
 }
 
@@ -296,25 +297,25 @@ enum OrderStatus {
 // ============================================================
 
 model Shipment {
-  id              String         @id @default(cuid())
-  carrierId       String
-  orderId         String
-  trackingNumber  String         @unique
-  status          ShipmentStatus @default(CREATED)
-  weightKg        Float?
-  estimatedAt     DateTime?
-  deliveredAt     DateTime?
-  podPhotoUrl     String?
-  podNotes        String?
-  failureReason   String?
-  attemptCount    Int            @default(0)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  carrierId      String
+  orderId        String
+  trackingNumber String         @unique
+  status         ShipmentStatus @default(CREATED)
+  weightKg       Float?
+  estimatedAt    DateTime?
+  deliveredAt    DateTime?
+  podPhotoUrl    String?
+  podNotes       String?
+  failureReason  String?
+  attemptCount   Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  carrier  Carrier         @relation(fields: [carrierId], references: [id])
-  order    Order           @relation(fields: [orderId], references: [id])
-  events   ShipmentEvent[]
-  stops    Stop[]
+  carrier Carrier         @relation(fields: [carrierId], references: [id])
+  order   Order           @relation(fields: [orderId], references: [id])
+  events  ShipmentEvent[]
+  stops   Stop[]
 }
 
 enum ShipmentStatus {
@@ -345,20 +346,20 @@ model ShipmentEvent {
 // ============================================================
 
 model Route {
-  id             String      @id @default(cuid())
-  carrierId      String
-  hubId          String
-  vehicleId      String?
-  driverId       String?
-  date           DateTime    @db.Date
-  status         RouteStatus @default(PLANNED)
-  plannedStartAt DateTime?
-  plannedEndAt   DateTime?
-  actualStartAt  DateTime?
-  actualEndAt    DateTime?
+  id              String      @id @default(cuid())
+  carrierId       String
+  hubId           String
+  vehicleId       String?
+  driverId        String?
+  date            DateTime    @db.Date
+  status          RouteStatus @default(PLANNED)
+  plannedStartAt  DateTime?
+  plannedEndAt    DateTime?
+  actualStartAt   DateTime?
+  actualEndAt     DateTime?
   totalDistanceKm Float?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   hub     Hub      @relation(fields: [hubId], references: [id])
   vehicle Vehicle? @relation(fields: [vehicleId], references: [id])
