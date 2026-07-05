@@ -1,47 +1,28 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
-import SettingsClient from "@/components/settings/SettingsClient";
+import SettingsForm from "@/components/settings/SettingsForm";
 
 export default async function SettingsPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/sign-in");
 
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: { customerProfile: true, staffProfile: true },
+    where: { id: session?.user?.id },
+    include: {
+      customerProfile: true,
+      driverProfile: true,
+      staffProfile: true,
+    },
   });
 
-  if (!user) redirect("/sign-in");
-
-  let carrier = null;
-  if (user.staffProfile?.role === "CARRIER_ADMIN") {
-    carrier = await prisma.carrier.findUnique({
-      where: { id: user.staffProfile.carrierId },
-    });
-  }
-
   return (
-    <SettingsClient
-      user={{
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        role: user.role,
-      }}
-      customer={
-        user.customerProfile
-          ? {
-              phone: user.customerProfile.phone,
-              city: user.customerProfile.city,
-              country: user.customerProfile.country,
-              bio: user.customerProfile.bio,
-              address: user.customerProfile.address as any,
-            }
-          : null
-      }
-      carrier={carrier}
-      isCarrierAdmin={user.staffProfile?.role === "CARRIER_ADMIN"}
-    />
+    <div className="max-w-2xl space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-white">Settings</h1>
+        <p className="mt-1" style={{ color: "var(--muted-foreground)" }}>
+          Manage your account and preferences
+        </p>
+      </div>
+      <SettingsForm user={user} />
+    </div>
   );
 }
