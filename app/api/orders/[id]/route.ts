@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { generateTrackingNumber } from "@/lib/utils/tracking";
 
 export async function GET(
   _: NextRequest,
@@ -40,6 +41,34 @@ export async function PATCH(
       where: { id },
       data: { status },
     });
+
+    // Auto-create shipment when order is confirmed
+    if (status === "CONFIRMED") {
+      const existing = await prisma.shipment.findFirst({
+        where: { orderId: id },
+      });
+
+      if (!existing) {
+        const shipment = await prisma.shipment.create({
+          data: {
+            carrierId: order.carrierId,
+            orderId: order.id,
+            trackingNumber: generateTrackingNumber(),
+            status: "CREATED",
+            weightKg: order.weightKg,
+          },
+        });
+
+        await prisma.shipmentEvent.create({
+          data: {
+            shipmentId: shipment.id,
+            type: "CREATED",
+            description: "Shipment created and awaiting pickup",
+            actor: session.user.name || "System",
+          },
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, order });
   } catch (error) {
