@@ -15,7 +15,10 @@ import {
   Settings,
   LogOut,
   Route,
+  ClipboardCheck,
 } from "lucide-react";
+
+const ADMIN_ROLES = ["SUPER_ADMIN", "CARRIER_ADMIN", "DISPATCHER"];
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -29,8 +32,15 @@ const navItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
+const adminNavItems = [
+  { href: "/dashboard/admin/drivers", label: "Driver Applications", icon: ClipboardCheck },
+];
+
 export default function Sidebar({ user }: { user: any }) {
   const pathname = usePathname();
+
+  const userRoles: string[] = user?.roles ?? (user?.role ? [user.role] : []);
+  const isAdmin = ADMIN_ROLES.some((r) => userRoles.includes(r));
 
   return (
     <aside
@@ -55,6 +65,7 @@ export default function Sidebar({ user }: { user: any }) {
       </div>
 
       {/* Nav */}
+      
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const active = pathname === item.href;
@@ -74,6 +85,32 @@ export default function Sidebar({ user }: { user: any }) {
             </Link>
           );
         })}
+
+        {isAdmin && (
+          <>
+            <div className="pt-3 mt-3 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted-foreground)", borderTop: "1px solid var(--border)" }}>
+              Admin
+            </div>
+            {adminNavItems.map((item) => {
+              const active = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
+                  style={{
+                    background: active ? "rgba(200,146,42,0.15)" : "transparent",
+                    color: active ? "var(--gold)" : "var(--muted-foreground)",
+                    border: active ? "1px solid rgba(200,146,42,0.3)" : "1px solid transparent",
+                  }}
+                >
+                  <item.icon size={18} />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       {/* User */}
