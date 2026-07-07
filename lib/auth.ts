@@ -58,13 +58,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.sub = user.id;
-        token.role = (user as any).role;
-        token.roles = (user as any).roles;
-        token.driverStatus = (user as any).driverStatus;
       }
 
-      // Allows the client to call update() after switching active role,
-      // or after a driver application is approved, without forcing re-login.
+      // Always sync role/roles/driverStatus from the database,
+      // so Google sign-ins (and role changes) are reflected correctly.
+      if (token.sub) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          include: { driverProfile: true },
+        });
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.roles = dbUser.roles;
+          token.driverStatus = dbUser.driverProfile?.verificationStatus ?? null;
+        }
+      }
+
       if (trigger === "update" && session) {
         if (session.role) token.role = session.role;
         if (session.roles) token.roles = session.roles;
