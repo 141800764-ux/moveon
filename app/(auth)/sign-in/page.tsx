@@ -30,11 +30,14 @@ function SignInForm() {
       redirect: false,
     });
 
+    console.log("SIGN IN RESULT:", res);
+
     setLoading(false);
 
     if (res?.error) {
       toast.error("Invalid email or password");
     } else {
+      console.log("Redirecting to:", callbackUrl);
       router.push(callbackUrl);
     }
   }
