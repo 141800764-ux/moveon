@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { upload } from "@vercel/blob/client";
 import { useRouter } from "next/navigation";
 import { Loader2, Upload, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,15 +21,12 @@ const DOCUMENT_FIELDS = [
 type DocKey = (typeof DOCUMENT_FIELDS)[number]["key"];
 
 async function uploadFile(file: File): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const res = await fetch("/api/upload", { method: "POST", body: formData });
-  const data = await res.json();
-
-  if (!res.ok) throw new Error(data.message || "Upload failed");
-  return data.url as string;
-}
+    const blob = await upload(`driver-docs/${Date.now()}-${file.name}`, file, {
+      access: "public",
+      handleUploadUrl: "/api/upload",
+    });
+    return blob.url;
+  }
 
 export default function DriverApplicationForm() {
   const router = useRouter();
