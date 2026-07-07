@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
+import { getToken } from "next-auth/jwt";
 
+// Route prefixes and who's allowed to see them.
+// Anything not matched here is left completely untouched.
 const ADMIN_ROLES = ["SUPER_ADMIN", "CARRIER_ADMIN", "DISPATCHER", "WAREHOUSE_MANAGER"];
 
-export default auth((req) => {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const isDriverRoute = pathname.startsWith("/dashboard/driver");
@@ -14,7 +16,7 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  const token = req.auth;
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
 
   if (!token) {
     const signInUrl = new URL("/sign-in", req.url);
@@ -23,7 +25,7 @@ export default auth((req) => {
   }
 
   if (isAdminRoute) {
-    const roles = (token.user?.roles as string[]) ?? [];
+    const roles = (token.roles as string[]) ?? [];
     const hasAdminRole = roles.some((r) => ADMIN_ROLES.includes(r));
     if (!hasAdminRole) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
@@ -31,15 +33,15 @@ export default auth((req) => {
   }
 
   if (isDriverRoute) {
-    const isActingAsDriver = token.user?.role === "DRIVER";
-    const isApproved = token.user?.driverStatus === "APPROVED";
+    const isActingAsDriver = token.role === "DRIVER";
+    const isApproved = token.driverStatus === "APPROVED";
     if (!isActingAsDriver || !isApproved) {
       return NextResponse.redirect(new URL("/dashboard/become-driver", req.url));
     }
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/dashboard/driver/:path*", "/dashboard/admin/:path*"],
