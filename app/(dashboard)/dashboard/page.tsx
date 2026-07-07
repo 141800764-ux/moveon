@@ -55,7 +55,7 @@ export default async function DashboardPage() {
           Welcome back, {session?.user?.name?.split(" ")[0]} 👋
         </h1>
         <p className="mt-1" style={{ color: "var(--muted-foreground)" }}>
-          Here's what's happening with MoveOn today.
+          Here's what's happening with MoveOnGo today.
         </p>
       </div>
 
