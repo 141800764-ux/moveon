@@ -6,8 +6,10 @@ const ADMIN_ROLES = ["SUPER_ADMIN", "CARRIER_ADMIN", "DISPATCHER"];
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.some((r) => session.user.roles.includes(r as any))) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
@@ -19,7 +21,7 @@ export async function PATCH(
   }
 
   const driver = await prisma.driver.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { user: true },
   });
   if (!driver) {
