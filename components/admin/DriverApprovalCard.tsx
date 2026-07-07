@@ -75,7 +75,7 @@ export default function DriverApprovalCard({ driver }: { driver: DriverApplicati
 
       <div className="flex flex-wrap gap-2">
         {driver.documents.map((doc) => (
-          
+          <a                                    
             key={doc.id}
             href={doc.fileUrl}
             target="_blank"
