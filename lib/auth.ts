@@ -21,6 +21,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email as string },
+          include: { driverProfile: true },
         });
 
         if (!user || !user.passwordHash) return null;
@@ -38,6 +39,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           image: user.image,
           role: user.role,
+          roles: user.roles,
+          driverStatus: user.driverProfile?.verificationStatus ?? null,
         };
       },
     }),
@@ -47,14 +50,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.sub) {
         session.user.id = token.sub;
         session.user.role = token.role as any;
+        session.user.roles = (token.roles as any) ?? ["CUSTOMER"];
+        session.user.driverStatus = (token.driverStatus as any) ?? null;
       }
       return session;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.sub = user.id;
         token.role = (user as any).role;
+        token.roles = (user as any).roles;
+        token.driverStatus = (user as any).driverStatus;
       }
+
+      // Allows the client to call update() after switching active role,
+      // or after a driver application is approved, without forcing re-login.
+      if (trigger === "update" && session) {
+        if (session.role) token.role = session.role;
+        if (session.roles) token.roles = session.roles;
+        if (session.driverStatus !== undefined) token.driverStatus = session.driverStatus;
+      }
+
       return token;
     },
   },

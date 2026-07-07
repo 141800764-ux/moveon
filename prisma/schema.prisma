@@ -51,21 +51,27 @@ model VerificationToken {
 // ============================================================
 
 model User {
-  id            String    @id @default(cuid())
+  id            String     @id @default(cuid())
   name          String?
-  email         String?   @unique
+  email         String?    @unique
   emailVerified DateTime?
   image         String?
-  role          UserRole  @default(CUSTOMER)
+
+  role          UserRole   @default(CUSTOMER)
+  roles         UserRole[] @default([CUSTOMER])
+
   passwordHash  String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   accounts        Account[]
   sessions        Session[]
   staffProfile    Staff?
   driverProfile   Driver?
   customerProfile Customer?
+
+  reviewedDocuments  DriverDocument[]   @relation("DocumentReviewer")
+  reviewedDrivers    Driver[]           @relation("DriverReviewer")
 }
 
 enum UserRole {
@@ -121,7 +127,7 @@ model Staff {
 }
 
 // ============================================================
-// DRIVER PROFILE
+// DRIVER PROFILE  (now with an approval pipeline)
 // ============================================================
 
 model Driver {
@@ -140,14 +146,23 @@ model Driver {
   isActive         Boolean      @default(true)
   avatar           String?
   bio              String?
+
+  verificationStatus DriverVerificationStatus @default(PENDING)
+  appliedAt          DateTime  @default(now())
+  reviewedAt         DateTime?
+  reviewedById       String?
+  rejectionReason    String?
+
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  carrier Carrier     @relation(fields: [carrierId], references: [id])
-  vehicle Vehicle?    @relation(fields: [vehicleId], references: [id])
-  routes  Route[]
-  shifts  DriverShift[]
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  carrier    Carrier         @relation(fields: [carrierId], references: [id])
+  vehicle    Vehicle?        @relation(fields: [vehicleId], references: [id])
+  reviewedBy User?           @relation("DriverReviewer", fields: [reviewedById], references: [id])
+  routes     Route[]
+  shifts     DriverShift[]
+  documents  DriverDocument[]
 }
 
 enum DriverStatus {
@@ -156,6 +171,49 @@ enum DriverStatus {
   ON_ROUTE
   ON_BREAK
   UNAVAILABLE
+}
+
+enum DriverVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+// ============================================================
+// DRIVER DOCUMENTS (uploaded during application, reviewed by admin)
+// ============================================================
+
+model DriverDocument {
+  id              String               @id @default(cuid())
+  driverId        String
+  type            DriverDocumentType
+  fileUrl         String
+  status          DriverDocumentStatus @default(PENDING)
+  rejectionReason String?
+  reviewedAt      DateTime?
+  reviewedById    String?
+  uploadedAt      DateTime             @default(now())
+
+  driver     Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  reviewedBy User?  @relation("DocumentReviewer", fields: [reviewedById], references: [id])
+
+  @@index([driverId])
+}
+
+enum DriverDocumentType {
+  ID_DOCUMENT
+  DRIVERS_LICENSE
+  PROOF_OF_ADDRESS
+  VEHICLE_REGISTRATION
+  VEHICLE_INSURANCE
+  PROFILE_PHOTO
+}
+
+enum DriverDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // ============================================================

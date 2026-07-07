@@ -1,4 +1,4 @@
-import { UserRole } from "@prisma/client";
+import { UserRole, DriverVerificationStatus } from "@prisma/client";
 import { DefaultSession } from "next-auth";
 
 declare module "next-auth" {
@@ -6,17 +6,22 @@ declare module "next-auth" {
     user: {
       id: string;
       role: UserRole;
+      roles: UserRole[];
+      driverStatus: DriverVerificationStatus | null;
     } & DefaultSession["user"];
   }
 
   interface User {
     role: UserRole;
-    passwordHash?: string | null;
+    roles: UserRole[];
+    driverStatus?: DriverVerificationStatus | null;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     role: UserRole;
+    roles: UserRole[];
+    driverStatus: DriverVerificationStatus | null;
   }
 }
