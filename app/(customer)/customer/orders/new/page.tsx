@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, MapPin } from "lucide-react";
 import Link from "next/link";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,18 +17,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
-type Quote = {
-  origin: { lat: number; lng: number };
-  destination: { lat: number; lng: number };
-  distanceKm: number;
-  deliveryFee: number;
-};
-
-export default function NewOrderPage() {
+export default function CustomerNewOrderPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [quoting, setQuoting] = useState(false);
-  const [quote, setQuote] = useState<Quote | null>(null);
   const [form, setForm] = useState({
     recipientName: "",
     recipientPhone: "",
@@ -45,74 +36,17 @@ export default function NewOrderPage() {
 
   function update(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
-    // Any address change invalidates the current quote
-    if (
-      ["originAddress", "originCity", "destinationAddress", "destinationCity"].includes(
-        field
-      )
-    ) {
-      setQuote(null);
-    }
-  }
-
-  async function handleGetQuote() {
-    if (!form.originAddress || !form.originCity || !form.destinationAddress || !form.destinationCity) {
-      toast.error("Please fill in both pickup and delivery addresses first");
-      return;
-    }
-
-    setQuoting(true);
-    try {
-      const res = await fetch("/api/orders/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          originAddress: form.originAddress,
-          originCity: form.originCity,
-          destinationAddress: form.destinationAddress,
-          destinationCity: form.destinationCity,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.message || "Could not calculate a quote");
-        return;
-      }
-
-      setQuote(data);
-      toast.success(`Quote: R${data.deliveryFee} for ${data.distanceKm}km`);
-    } catch {
-      toast.error("Something went wrong getting the quote");
-    } finally {
-      setQuoting(false);
-    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (!quote) {
-      toast.error("Please get a delivery quote before placing the order");
-      return;
-    }
-
     setLoading(true);
 
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          originLat: quote.origin.lat,
-          originLng: quote.origin.lng,
-          destinationLat: quote.destination.lat,
-          destinationLng: quote.destination.lng,
-          distanceKm: quote.distanceKm,
-          deliveryFee: quote.deliveryFee,
-        }),
+        body: JSON.stringify(form),
       });
 
       const data = await res.json();
@@ -122,8 +56,8 @@ export default function NewOrderPage() {
         return;
       }
 
-      toast.success("Order created successfully!");
-      router.push("/dashboard/orders");
+      toast.success("Order placed successfully!");
+      router.push("/customer/orders");
     } catch {
       toast.error("Something went wrong");
     } finally {
@@ -138,10 +72,9 @@ export default function NewOrderPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
-      {/* Header */}
+    <div className="max-w-2xl space-y-6 py-8">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/orders">
+        <Link href="/customer/orders">
           <button
             className="p-2 rounded-xl transition hover:bg-white/5"
             style={{ color: "var(--muted-foreground)" }}
@@ -150,9 +83,9 @@ export default function NewOrderPage() {
           </button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-white">New Order</h1>
+          <h1 className="text-3xl font-bold text-white">Place Order</h1>
           <p className="mt-1" style={{ color: "var(--muted-foreground)" }}>
-            Fill in the details to create a new delivery order
+            Send a package anywhere in South Africa
           </p>
         </div>
       </div>
@@ -163,9 +96,9 @@ export default function NewOrderPage() {
           className="rounded-2xl p-6 space-y-4"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         >
-          <h2 className="text-lg font-semibold text-white">Recipient Details</h2>
+          <h2 className="text-lg font-semibold text-white">Recipient</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label className="text-white">Full Name *</Label>
               <Input
                 placeholder="John Doe"
@@ -185,7 +118,7 @@ export default function NewOrderPage() {
                 style={inputStyle}
               />
             </div>
-            <div className="space-y-1.5 sm:col-span-2">
+            <div className="space-y-1.5">
               <Label className="text-white">Email</Label>
               <Input
                 type="email"
@@ -198,7 +131,7 @@ export default function NewOrderPage() {
           </div>
         </div>
 
-        {/* Origin */}
+        {/* Pickup */}
         <div
           className="rounded-2xl p-6 space-y-4"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
@@ -228,7 +161,7 @@ export default function NewOrderPage() {
           </div>
         </div>
 
-        {/* Destination */}
+        {/* Delivery */}
         <div
           className="rounded-2xl p-6 space-y-4"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
@@ -258,63 +191,7 @@ export default function NewOrderPage() {
           </div>
         </div>
 
-        {/* Quote */}
-        <div
-          className="rounded-2xl p-6 space-y-4"
-          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">Delivery Quote</h2>
-              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                R15 per km, R50 minimum
-              </p>
-            </div>
-            <Button
-              type="button"
-              onClick={handleGetQuote}
-              disabled={quoting}
-              className="font-semibold text-white"
-              style={{ background: "var(--secondary)", border: "1px solid var(--border)" }}
-            >
-              {quoting && <Loader2 size={16} className="animate-spin mr-2" />}
-              {quoting ? "Calculating..." : "Get Quote"}
-            </Button>
-          </div>
-
-          {quote && (
-            <div
-              className="rounded-xl p-4 flex items-center justify-between"
-              style={{ background: "rgba(200,146,42,0.1)", border: "1px solid rgba(200,146,42,0.3)" }}
-            >
-              <div className="flex items-center gap-3">
-                <MapPin size={20} style={{ color: "var(--gold)" }} />
-                <div>
-                  <p className="text-white font-semibold">{quote.distanceKm} km</p>
-                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                    Estimated distance
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold" style={{ color: "var(--gold)" }}>
-                  R{quote.deliveryFee}
-                </p>
-                <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                  Delivery fee
-                </p>
-              </div>
-            </div>
-          )}
-
-          {!quote && (
-            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              Click "Get Quote" to calculate the delivery price based on distance.
-            </p>
-          )}
-        </div>
-
-        {/* Package Details */}
+        {/* Package */}
         <div
           className="rounded-2xl p-6 space-y-4"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
@@ -332,7 +209,7 @@ export default function NewOrderPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-white">Declared Value (R)</Label>
+              <Label className="text-white">Value (R)</Label>
               <Input
                 type="number"
                 placeholder="500"
@@ -342,7 +219,7 @@ export default function NewOrderPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-white">Service Level</Label>
+              <Label className="text-white">Service</Label>
               <Select
                 value={form.serviceLevel}
                 onValueChange={(v) => update("serviceLevel", v)}
@@ -373,12 +250,12 @@ export default function NewOrderPage() {
 
         <Button
           type="submit"
-          disabled={loading || !quote}
+          disabled={loading}
           className="w-full h-12 font-semibold text-white text-base"
           style={{ background: "var(--gold)" }}
         >
           {loading && <Loader2 size={18} className="animate-spin mr-2" />}
-          {!quote ? "Get a quote first" : "Create Order"}
+          Place Order
         </Button>
       </form>
     </div>

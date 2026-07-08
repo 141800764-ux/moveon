@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE "Order" ADD COLUMN     "deliveryFee" DECIMAL(12,2),
+ADD COLUMN     "destinationLat" DOUBLE PRECISION,
+ADD COLUMN     "destinationLng" DOUBLE PRECISION,
+ADD COLUMN     "distanceKm" DOUBLE PRECISION,
+ADD COLUMN     "originLat" DOUBLE PRECISION,
+ADD COLUMN     "originLng" DOUBLE PRECISION;

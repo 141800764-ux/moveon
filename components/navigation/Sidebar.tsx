@@ -55,8 +55,8 @@ export default function Sidebar({ user }: { user: any }) {
         <Image
           src="/images/MoveOnLogo.png"
           alt="MoveOn"
-          width={76}
-          height={36}
+          width={100}
+          height={76}
           className="rounded-lg"
         />
         <span className="text-xl font-bold" style={{ color: "var(--gold)" }}>

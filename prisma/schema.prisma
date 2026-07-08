@@ -324,6 +324,12 @@ model Order {
   serviceLevel   String      @default("STANDARD")
   origin         Json
   destination    Json
+  originLat      Float?
+  originLng      Float?
+  destinationLat Float?
+  destinationLng Float?
+  distanceKm     Float?
+  deliveryFee    Decimal?    @db.Decimal(12, 2)
   recipientName  String
   recipientPhone String
   recipientEmail String?

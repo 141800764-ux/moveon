@@ -12,9 +12,6 @@ import { toast } from "sonner";
 
 function SignInForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
-
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -35,13 +32,23 @@ function SignInForm() {
     if (res?.error) {
       toast.error("Invalid email or password");
     } else {
-      window.location.href = callbackUrl;
+      const sessionRes = await fetch("/api/auth/session");
+      const session = await sessionRes.json();
+      const role = session?.user?.role;
+
+      if (role === "DRIVER") {
+        router.push("/driver");
+      } else if (role === "CUSTOMER") {
+        router.push("/customer");
+      } else {
+        router.push("/dashboard");
+      }
     }
   }
 
   async function handleGoogle() {
     setGoogleLoading(true);
-    await signIn("google", { callbackUrl });
+    await signIn("google", { callbackUrl: "/customer" });
   }
 
   return (
