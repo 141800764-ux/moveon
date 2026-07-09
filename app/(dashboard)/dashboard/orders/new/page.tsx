@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, MapPin } from "lucide-react";
 import Link from "next/link";
@@ -16,12 +16,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import AddressInput from "@/components/ui/AddressInput";
 
 type Quote = {
   origin: { lat: number; lng: number };
   destination: { lat: number; lng: number };
   distanceKm: number;
   deliveryFee: number;
+  driverPayout: number;
+  platformFee: number;
 };
 
 export default function NewOrderPage() {
@@ -35,8 +38,12 @@ export default function NewOrderPage() {
     recipientEmail: "",
     originAddress: "",
     originCity: "",
+    originLat: 0,
+    originLng: 0,
     destinationAddress: "",
     destinationCity: "",
+    destinationLat: 0,
+    destinationLng: 0,
     weightKg: "",
     serviceLevel: "STANDARD",
     notes: "",
@@ -45,7 +52,6 @@ export default function NewOrderPage() {
 
   function update(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
-    // Any address change invalidates the current quote
     if (
       ["originAddress", "originCity", "destinationAddress", "destinationCity"].includes(
         field
@@ -55,38 +61,75 @@ export default function NewOrderPage() {
     }
   }
 
-  async function handleGetQuote() {
-    if (!form.originAddress || !form.originCity || !form.destinationAddress || !form.destinationCity) {
-      toast.error("Please fill in both pickup and delivery addresses first");
+  // Fetches a quote given explicit coordinates (used by both auto-trigger and manual button)
+  const fetchQuote = useCallback(
+    async (originLat: number, originLng: number, destinationLat: number, destinationLng: number) => {
+      setQuoting(true);
+      try {
+        const res = await fetch("/api/orders/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ originLat, originLng, destinationLat, destinationLng }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          toast.error(data.message || "Could not calculate a quote");
+          return;
+        }
+
+        setQuote(data);
+        toast.success(`Quote ready — R${data.deliveryFee} for ${data.distanceKm}km`);
+      } catch {
+        toast.error("Something went wrong getting the quote");
+      } finally {
+        setQuoting(false);
+      }
+    },
+    []
+  );
+
+  // Manual "Get Quote" button — uses whatever is currently in form state
+  function handleGetQuote() {
+    if (!form.originLat || !form.destinationLat) {
+      toast.error("Please select both pickup and delivery addresses from the dropdown suggestions");
       return;
     }
+    fetchQuote(form.originLat, form.originLng, form.destinationLat, form.destinationLng);
+  }
 
-    setQuoting(true);
-    try {
-      const res = await fetch("/api/orders/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          originAddress: form.originAddress,
-          originCity: form.originCity,
-          destinationAddress: form.destinationAddress,
-          destinationCity: form.destinationCity,
-        }),
-      });
+  function handleOriginSelect(data: { address: string; city: string; lat: number; lng: number }) {
+    const updated = {
+      ...form,
+      originAddress: data.address,
+      originCity: data.city,
+      originLat: data.lat,
+      originLng: data.lng,
+    };
+    setForm(updated);
+    setQuote(null);
 
-      const data = await res.json();
+    // Auto-fetch if destination is already selected
+    if (updated.destinationLat) {
+      fetchQuote(data.lat, data.lng, updated.destinationLat, updated.destinationLng);
+    }
+  }
 
-      if (!res.ok) {
-        toast.error(data.message || "Could not calculate a quote");
-        return;
-      }
+  function handleDestinationSelect(data: { address: string; city: string; lat: number; lng: number }) {
+    const updated = {
+      ...form,
+      destinationAddress: data.address,
+      destinationCity: data.city,
+      destinationLat: data.lat,
+      destinationLng: data.lng,
+    };
+    setForm(updated);
+    setQuote(null);
 
-      setQuote(data);
-      toast.success(`Quote: R${data.deliveryFee} for ${data.distanceKm}km`);
-    } catch {
-      toast.error("Something went wrong getting the quote");
-    } finally {
-      setQuoting(false);
+    // Auto-fetch if origin is already selected
+    if (updated.originLat) {
+      fetchQuote(updated.originLat, updated.originLng, data.lat, data.lng);
     }
   }
 
@@ -94,7 +137,7 @@ export default function NewOrderPage() {
     e.preventDefault();
 
     if (!quote) {
-      toast.error("Please get a delivery quote before placing the order");
+      toast.error("Please select both addresses to get a delivery quote before placing the order");
       return;
     }
 
@@ -112,6 +155,8 @@ export default function NewOrderPage() {
           destinationLng: quote.destination.lng,
           distanceKm: quote.distanceKm,
           deliveryFee: quote.deliveryFee,
+          driverPayout: quote.driverPayout,
+          platformFee: quote.platformFee,
         }),
       });
 
@@ -204,28 +249,24 @@ export default function NewOrderPage() {
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         >
           <h2 className="text-lg font-semibold text-white">Pickup Address</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-white">Street Address *</Label>
-              <Input
-                placeholder="123 Main Street"
-                value={form.originAddress}
-                onChange={(e) => update("originAddress", e.target.value)}
-                required
-                style={inputStyle}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-white">City *</Label>
-              <Input
-                placeholder="Cape Town"
-                value={form.originCity}
-                onChange={(e) => update("originCity", e.target.value)}
-                required
-                style={inputStyle}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-white">Search Address *</Label>
+            <AddressInput
+              placeholder="Start typing pickup address..."
+              value={form.originAddress}
+              onChange={(val) => {
+                setForm((p) => ({ ...p, originAddress: val }));
+                setQuote(null);
+              }}
+              onSelect={handleOriginSelect}
+              style={inputStyle}
+            />
           </div>
+          {form.originCity && (
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              City: <span className="text-white">{form.originCity}</span>
+            </p>
+          )}
         </div>
 
         {/* Destination */}
@@ -234,28 +275,24 @@ export default function NewOrderPage() {
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         >
           <h2 className="text-lg font-semibold text-white">Delivery Address</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-white">Street Address *</Label>
-              <Input
-                placeholder="456 Oak Avenue"
-                value={form.destinationAddress}
-                onChange={(e) => update("destinationAddress", e.target.value)}
-                required
-                style={inputStyle}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-white">City *</Label>
-              <Input
-                placeholder="Johannesburg"
-                value={form.destinationCity}
-                onChange={(e) => update("destinationCity", e.target.value)}
-                required
-                style={inputStyle}
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-white">Search Address *</Label>
+            <AddressInput
+              placeholder="Start typing delivery address..."
+              value={form.destinationAddress}
+              onChange={(val) => {
+                setForm((p) => ({ ...p, destinationAddress: val }));
+                setQuote(null);
+              }}
+              onSelect={handleDestinationSelect}
+              style={inputStyle}
+            />
           </div>
+          {form.destinationCity && (
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              City: <span className="text-white">{form.destinationCity}</span>
+            </p>
+          )}
         </div>
 
         {/* Quote */}
@@ -267,7 +304,7 @@ export default function NewOrderPage() {
             <div>
               <h2 className="text-lg font-semibold text-white">Delivery Quote</h2>
               <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                R15 per km, R50 minimum
+                R15 per km, R50 minimum — calculated automatically once both addresses are selected
               </p>
             </div>
             <Button
@@ -278,38 +315,61 @@ export default function NewOrderPage() {
               style={{ background: "var(--secondary)", border: "1px solid var(--border)" }}
             >
               {quoting && <Loader2 size={16} className="animate-spin mr-2" />}
-              {quoting ? "Calculating..." : "Get Quote"}
+              {quoting ? "Calculating..." : "Recalculate"}
             </Button>
           </div>
 
           {quote && (
-            <div
-              className="rounded-xl p-4 flex items-center justify-between"
-              style={{ background: "rgba(200,146,42,0.1)", border: "1px solid rgba(200,146,42,0.3)" }}
-            >
-              <div className="flex items-center gap-3">
-                <MapPin size={20} style={{ color: "var(--gold)" }} />
-                <div>
-                  <p className="text-white font-semibold">{quote.distanceKm} km</p>
+            <div className="space-y-3">
+              <div
+                className="rounded-xl p-4 flex items-center justify-between"
+                style={{ background: "rgba(200,146,42,0.1)", border: "1px solid rgba(200,146,42,0.3)" }}
+              >
+                <div className="flex items-center gap-3">
+                  <MapPin size={20} style={{ color: "var(--gold)" }} />
+                  <div>
+                    <p className="text-white font-semibold">{quote.distanceKm} km</p>
+                    <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                      Estimated distance
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold" style={{ color: "var(--gold)" }}>
+                    R{quote.deliveryFee}
+                  </p>
                   <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                    Estimated distance
+                    Delivery fee
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold" style={{ color: "var(--gold)" }}>
-                  R{quote.deliveryFee}
-                </p>
-                <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                  Delivery fee
-                </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div
+                  className="rounded-xl p-3"
+                  style={{ background: "var(--background)", border: "1px solid var(--border)" }}
+                >
+                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    Driver payout (80%)
+                  </p>
+                  <p className="text-lg font-semibold text-white">R{quote.driverPayout}</p>
+                </div>
+                <div
+                  className="rounded-xl p-3"
+                  style={{ background: "var(--background)", border: "1px solid var(--border)" }}
+                >
+                  <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    Platform fee (20%)
+                  </p>
+                  <p className="text-lg font-semibold text-white">R{quote.platformFee}</p>
+                </div>
               </div>
             </div>
           )}
 
-          {!quote && (
+          {!quote && !quoting && (
             <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              Click "Get Quote" to calculate the delivery price based on distance.
+              Select both pickup and delivery addresses above — the price will appear automatically.
             </p>
           )}
         </div>
@@ -378,7 +438,7 @@ export default function NewOrderPage() {
           style={{ background: "var(--gold)" }}
         >
           {loading && <Loader2 size={18} className="animate-spin mr-2" />}
-          {!quote ? "Get a quote first" : "Create Order"}
+          {!quote ? "Select addresses to get a quote" : "Create Order"}
         </Button>
       </form>
     </div>

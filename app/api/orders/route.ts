@@ -42,6 +42,12 @@ export async function POST(request: NextRequest) {
       serviceLevel,
       notes,
       declaredValue,
+      originLat,
+      originLng,
+      destinationLat,
+      destinationLng,
+      distanceKm,
+      deliveryFee,
     } = body;
 
     if (!recipientName || !recipientPhone || !originAddress || !destinationAddress) {
@@ -77,6 +83,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const parsedFee = deliveryFee ? parseFloat(deliveryFee) : null;
+    const driverPayout = parsedFee ? Math.round(parsedFee * 0.8 * 100) / 100 : null;
+    const platformFee = parsedFee ? Math.round(parsedFee * 0.2 * 100) / 100 : null;
+
     const order = await prisma.order.create({
       data: {
         carrierId: carrier.id,
@@ -86,6 +96,14 @@ export async function POST(request: NextRequest) {
         serviceLevel: serviceLevel || "STANDARD",
         origin: { address: originAddress, city: originCity },
         destination: { address: destinationAddress, city: destinationCity },
+        originLat: originLat ? parseFloat(originLat) : null,
+        originLng: originLng ? parseFloat(originLng) : null,
+        destinationLat: destinationLat ? parseFloat(destinationLat) : null,
+        destinationLng: destinationLng ? parseFloat(destinationLng) : null,
+        distanceKm: distanceKm ? parseFloat(distanceKm) : null,
+        deliveryFee: parsedFee,
+        driverPayout,
+        platformFee,
         recipientName,
         recipientPhone,
         recipientEmail: recipientEmail || null,
