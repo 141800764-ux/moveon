@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -16,6 +17,8 @@ import {
   LogOut,
   Route,
   ClipboardCheck,
+  Menu,
+  X,
 } from "lucide-react";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "CARRIER_ADMIN", "DISPATCHER"];
@@ -33,122 +36,200 @@ const navItems = [
 ];
 
 const adminNavItems = [
-  { href: "/dashboard/admin/drivers", label: "Driver Applications", icon: ClipboardCheck },
+  {
+    href: "/dashboard/admin/drivers",
+    label: "Driver Applications",
+    icon: ClipboardCheck,
+  },
 ];
 
 export default function Sidebar({ user }: { user: any }) {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
   const userRoles: string[] = user?.roles ?? (user?.role ? [user.role] : []);
   const isAdmin = ADMIN_ROLES.some((r) => userRoles.includes(r));
 
   return (
-    <aside
-      className="fixed left-0 top-0 h-full w-64 flex flex-col"
-      style={{
-        background: "var(--card)",
-        borderRight: "1px solid var(--border)",
-      }}
-    >
-      {/* Logo */}
-      <div className="p-6 flex items-center gap-3" style={{ borderBottom: "1px solid var(--border)" }}>
-        <Image
-          src="/images/MoveOnLogo.png"
-          alt="MoveOn"
-          width={100}
-          height={76}
-          className="rounded-lg"
-        />
-        <span className="text-xl font-bold" style={{ color: "var(--gold)" }}>
-          MoveOnGo
-        </span>
-      </div>
+    <>
+      {/* Mobile Hamburger */}
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed top-5 left-5 z-50 lg:hidden p-2 rounded-lg"
+        style={{
+          background: "var(--card)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        <Menu size={24} />
+      </button>
 
-      {/* Nav */}
-      
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
-              style={{
-                background: active ? "rgba(200,146,42,0.15)" : "transparent",
-                color: active ? "var(--gold)" : "var(--muted-foreground)",
-                border: active ? "1px solid rgba(200,146,42,0.3)" : "1px solid transparent",
-              }}
-            >
-              <item.icon size={18} />
-              {item.label}
-            </Link>
-          );
-        })}
-
-        {isAdmin && (
-          <>
-            <div className="pt-3 mt-3 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted-foreground)", borderTop: "1px solid var(--border)" }}>
-              Admin
-            </div>
-            {adminNavItems.map((item) => {
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
-                  style={{
-                    background: active ? "rgba(200,146,42,0.15)" : "transparent",
-                    color: active ? "var(--gold)" : "var(--muted-foreground)",
-                    border: active ? "1px solid rgba(200,146,42,0.3)" : "1px solid transparent",
-                  }}
-                >
-                  <item.icon size={18} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </>
-        )}
-      </nav>
-
-      {/* User */}
-      <div className="p-4" style={{ borderTop: "1px solid var(--border)" }}>
-        <div className="flex items-center gap-3 px-3 py-2 mb-2">
-          {user?.image ? (
-            <Image
-              src={user.image}
-              alt={user.name || "User"}
-              width={32}
-              height={32}
-              className="rounded-full"
-            />
-          ) : (
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
-              style={{ background: "var(--gold)", color: "white" }}
-            >
-              {user?.name?.[0] || "U"}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-            <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>
-              {user?.role?.toLowerCase()}
-            </p>
-          </div>
+      {/* Sidebar */}
+      <aside
+        className={`fixed left-0 top-0 h-full w-64 flex flex-col transition-transform duration-300 z-50 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
+        style={{
+          background: "var(--card)",
+          borderRight: "1px solid var(--border)",
+        }}
+      >
+        {/* Mobile Close */}
+        <div className="flex justify-end p-4 lg:hidden">
+          <button onClick={() => setOpen(false)}>
+            <X size={24} />
+          </button>
         </div>
 
-        <button
-          onClick={() => signOut({ callbackUrl: "/sign-in" })}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full transition-all hover:bg-red-500/10"
-          style={{ color: "var(--muted-foreground)" }}
+        {/* Logo */}
+        <div
+          className="p-6 flex items-center gap-3"
+          style={{ borderBottom: "1px solid var(--border)" }}
         >
-          <LogOut size={18} />
-          Sign Out
-        </button>
-      </div>
-    </aside>
+          <Image
+            src="/images/MoveOnLogo.png"
+            alt="MoveOn"
+            width={100}
+            height={76}
+            className="rounded-lg"
+          />
+          <span
+            className="text-xl font-bold"
+            style={{ color: "var(--gold)" }}
+          >
+            MoveOnGo
+          </span>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const active = pathname === item.href;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={{
+                  background: active
+                    ? "rgba(200,146,42,0.15)"
+                    : "transparent",
+                  color: active
+                    ? "var(--gold)"
+                    : "var(--muted-foreground)",
+                  border: active
+                    ? "1px solid rgba(200,146,42,0.3)"
+                    : "1px solid transparent",
+                }}
+              >
+                <item.icon size={18} />
+                {item.label}
+              </Link>
+            );
+          })}
+
+          {isAdmin && (
+            <>
+              <div
+                className="pt-3 mt-3 px-3 text-xs font-semibold uppercase tracking-wider"
+                style={{
+                  color: "var(--muted-foreground)",
+                  borderTop: "1px solid var(--border)",
+                }}
+              >
+                Admin
+              </div>
+
+              {adminNavItems.map((item) => {
+                const active = pathname === item.href;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
+                    style={{
+                      background: active
+                        ? "rgba(200,146,42,0.15)"
+                        : "transparent",
+                      color: active
+                        ? "var(--gold)"
+                        : "var(--muted-foreground)",
+                      border: active
+                        ? "1px solid rgba(200,146,42,0.3)"
+                        : "1px solid transparent",
+                    }}
+                  >
+                    <item.icon size={18} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </>
+          )}
+        </nav>
+
+        {/* User */}
+        <div
+          className="p-4"
+          style={{ borderTop: "1px solid var(--border)" }}
+        >
+          <div className="flex items-center gap-3 px-3 py-2 mb-2">
+            {user?.image ? (
+              <Image
+                src={user.image}
+                alt={user.name || "User"}
+                width={32}
+                height={32}
+                className="rounded-full"
+              />
+            ) : (
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                style={{
+                  background: "var(--gold)",
+                  color: "white",
+                }}
+              >
+                {user?.name?.[0] || "U"}
+              </div>
+            )}
+
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">
+                {user?.name}
+              </p>
+
+              <p
+                className="text-xs truncate"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                {user?.role?.toLowerCase()}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => signOut({ callbackUrl: "/sign-in" })}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full transition-all hover:bg-red-500/10"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <LogOut size={18} />
+            Sign Out
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile Overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
