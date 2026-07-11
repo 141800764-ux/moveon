@@ -24,10 +24,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = await getToken({
+  // Try secure cookie first (production), fall back to regular (development)
+  let token = await getToken({
     req,
     secret: process.env.AUTH_SECRET,
+    cookieName: "__Secure-authjs.session-token",
   });
+
+  if (!token) {
+    token = await getToken({
+      req,
+      secret: process.env.AUTH_SECRET,
+      cookieName: "authjs.session-token",
+    });
+  }
 
   const isLoggedIn = !!token;
   const role = (token?.role as string) ?? "";
