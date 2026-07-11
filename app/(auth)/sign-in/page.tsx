@@ -2,7 +2,6 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 function SignInForm() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -32,23 +30,13 @@ function SignInForm() {
     if (res?.error) {
       toast.error("Invalid email or password");
     } else {
-      const sessionRes = await fetch("/api/auth/session");
-      const session = await sessionRes.json();
-      const role = session?.user?.role;
-
-      if (role === "DRIVER") {
-        router.push("/driver");
-      } else if (role === "CUSTOMER") {
-        router.push("/customer");
-      } else {
-        router.push("/dashboard");
-      }
+      window.location.href = "/";
     }
   }
 
   async function handleGoogle() {
     setGoogleLoading(true);
-    await signIn("google", { callbackUrl: "/customer" });
+    await signIn("google", { callbackUrl: "/" });
   }
 
   return (
@@ -97,6 +85,7 @@ function SignInForm() {
           <Input
             id="email"
             type="email"
+            autoComplete="email"
             placeholder="you@example.com"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -115,6 +104,7 @@ function SignInForm() {
             <Input
               id="password"
               type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
               placeholder="••••••••"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
