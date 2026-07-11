@@ -1,52 +1,61 @@
+import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "CARRIER_ADMIN", "DISPATCHER", "WAREHOUSE_MANAGER"];
+const ADMIN_ROLES = [
+  "SUPER_ADMIN",
+  "CARRIER_ADMIN",
+  "DISPATCHER",
+  "WAREHOUSE_MANAGER",
+];
 
-export async function middleware(req: NextRequest) {
+export default auth((req) => {
   const { pathname } = req.nextUrl;
+  const role = (req.auth?.user as any)?.role;
+  const isLoggedIn = !!req.auth;
 
-  const isDriverRoute = pathname.startsWith("/dashboard/driver");
-  const isAdminRoute = pathname.startsWith("/dashboard/admin");
-
-  if (!isDriverRoute && !isAdminRoute) {
+  // Public routes — always allow
+  if (
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/sign-up") ||
+    pathname.startsWith("/track") ||
+    pathname.startsWith("/api")
+  ) {
     return NextResponse.next();
   }
 
-  const token = await getToken({
-    req,
-    secret: process.env.AUTH_SECRET,
-    cookieName: process.env.NODE_ENV === "production"
-      ? "__Secure-authjs.session-token"
-      : "authjs.session-token",
-  });
-
-  if (!token) {
-    const signInUrl = new URL("/sign-in", req.url);
-    signInUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(signInUrl);
+  // Not logged in — redirect to sign in
+  if (!isLoggedIn) {
+    return NextResponse.redirect(new URL("/sign-in", req.url));
   }
 
-  if (isAdminRoute) {
-    const roles = (token.roles as string[]) ?? [];
-    const hasAdminRole = roles.some((r) => ADMIN_ROLES.includes(r));
-    if (!hasAdminRole) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
+  // Root redirect
+  if (pathname === "/") {
+    if (role === "DRIVER") return NextResponse.redirect(new URL("/driver", req.url));
+    if (role === "CUSTOMER") return NextResponse.redirect(new URL("/customer", req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
-  if (isDriverRoute) {
-    const isActingAsDriver = token.role === "DRIVER";
-    const isApproved = token.driverStatus === "APPROVED";
-    if (!isActingAsDriver || !isApproved) {
-      return NextResponse.redirect(new URL("/dashboard/become-driver", req.url));
-    }
+  // Protect admin portal
+  if (pathname.startsWith("/dashboard") && !ADMIN_ROLES.includes(role)) {
+    if (role === "DRIVER") return NextResponse.redirect(new URL("/driver", req.url));
+    return NextResponse.redirect(new URL("/customer", req.url));
+  }
+
+  // Protect driver portal
+  if (pathname.startsWith("/driver") && role !== "DRIVER") {
+    if (ADMIN_ROLES.includes(role)) return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL("/customer", req.url));
+  }
+
+  // Protect customer portal
+  if (pathname.startsWith("/customer") && role !== "CUSTOMER") {
+    if (role === "DRIVER") return NextResponse.redirect(new URL("/driver", req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
-  matcher: ["/dashboard/driver/:path*", "/dashboard/admin/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|images).*)"],
 };
