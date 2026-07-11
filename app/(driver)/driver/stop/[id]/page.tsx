@@ -131,6 +131,21 @@ export default function StopDetailPage() {
             {stop.contactPhone && `· ${stop.contactPhone}`}
           </p>
         )}
+
+        {stop.shipment?.order?.driverPayout != null && (
+          <div
+            className="mt-3 pt-3 flex items-center justify-between"
+            style={{ borderTop: "1px solid var(--border)" }}
+          >
+            <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+              You'll earn
+            </span>
+            <span className="text-lg font-bold" style={{ color: "var(--gold)" }}>
+              R{Number(stop.shipment.order.driverPayout).toFixed(2)}
+            </span>
+          </div>
+        )}
+
         <Button
           onClick={openNavigation}
           className="mt-4 w-full font-semibold text-white flex items-center gap-2"

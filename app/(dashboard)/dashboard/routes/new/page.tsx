@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Plus, Trash2, Package, CheckCircle } from "lucide-react";
+import { ArrowLeft, Loader2, MapPin, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,26 +16,17 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
-type Shipment = {
+type OrderOption = {
   id: string;
   trackingNumber: string;
-  order: {
-    recipientName: string;
-    recipientPhone: string;
-    destination: { address: string; city: string };
-    origin: { address: string; city: string };
-  };
-};
-
-type Stop = {
-  type: string;
-  address: string;
-  city: string;
-  contactName: string;
-  contactPhone: string;
-  sequence: number;
-  shipmentId?: string;
-  trackingNumber?: string;
+  recipientName: string;
+  recipientPhone: string;
+  destination: { address?: string; city?: string };
+  destinationLat: number | null;
+  destinationLng: number | null;
+  deliveryFee: number | null;
+  status: string;
+  shipments: { id: string }[];
 };
 
 export default function NewRoutePage() {
@@ -44,8 +35,8 @@ export default function NewRoutePage() {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [hubs, setHubs] = useState<any[]>([]);
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [selectedShipments, setSelectedShipments] = useState<string[]>([]);
+  const [orders, setOrders] = useState<OrderOption[]>([]);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [form, setForm] = useState({
     hubId: "",
     driverId: "",
@@ -54,19 +45,27 @@ export default function NewRoutePage() {
     plannedStartAt: "",
     plannedEndAt: "",
   });
-  const [stops, setStops] = useState<Stop[]>([]);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/drivers").then((r) => r.json()),
       fetch("/api/vehicles").then((r) => r.json()),
       fetch("/api/hubs").then((r) => r.json()),
-      fetch("/api/shipments/unassigned").then((r) => r.json()),
-    ]).then(([d, v, h, s]) => {
+      fetch("/api/orders").then((r) => r.json()),
+    ]).then(([d, v, h, o]) => {
       setDrivers(d.drivers || []);
       setVehicles(v.vehicles || []);
       setHubs(h.hubs || []);
-      setShipments(s.shipments || []);
+
+      // Only show orders that are pending/confirmed and not already on a route (no shipment yet)
+      const unassigned = (o.orders || []).filter(
+        (order: OrderOption) =>
+          (order.status === "PENDING" || order.status === "CONFIRMED") &&
+          (!order.shipments || order.shipments.length === 0) &&
+          order.destinationLat &&
+          order.destinationLng
+      );
+      setOrders(unassigned);
     });
   }, []);
 
@@ -74,79 +73,19 @@ export default function NewRoutePage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function toggleShipment(shipment: Shipment) {
-    const isSelected = selectedShipments.includes(shipment.id);
-
-    if (isSelected) {
-      setSelectedShipments((prev) => prev.filter((id) => id !== shipment.id));
-      setStops((prev) =>
-        prev
-          .filter((s) => s.shipmentId !== shipment.id)
-          .map((s, i) => ({ ...s, sequence: i + 1 }))
-      );
-    } else {
-      setSelectedShipments((prev) => [...prev, shipment.id]);
-      const destination = shipment.order.destination;
-      setStops((prev) => [
-        ...prev,
-        {
-          type: "DELIVERY",
-          address: destination.address,
-          city: destination.city,
-          contactName: shipment.order.recipientName,
-          contactPhone: shipment.order.recipientPhone,
-          sequence: prev.length + 1,
-          shipmentId: shipment.id,
-          trackingNumber: shipment.trackingNumber,
-        },
-      ]);
-    }
-  }
-
-  function addManualStop() {
-    setStops((prev) => [
-      ...prev,
-      {
-        type: "DELIVERY",
-        address: "",
-        city: "",
-        contactName: "",
-        contactPhone: "",
-        sequence: prev.length + 1,
-      },
-    ]);
-  }
-
-  function updateStop(index: number, field: string, value: string) {
-    setStops((prev) =>
-      prev.map((s, i) => (i === index ? { ...s, [field]: value } : s))
-    );
-  }
-
-  function removeStop(index: number) {
-    const stop = stops[index];
-    if (stop.shipmentId) {
-      setSelectedShipments((prev) =>
-        prev.filter((id) => id !== stop.shipmentId)
-      );
-    }
-    setStops((prev) =>
-      prev
-        .filter((_, i) => i !== index)
-        .map((s, i) => ({ ...s, sequence: i + 1 }))
+  function toggleOrder(orderId: string) {
+    setSelectedOrderIds((prev) =>
+      prev.includes(orderId)
+        ? prev.filter((id) => id !== orderId)
+        : [...prev, orderId]
     );
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!form.hubId) {
-      toast.error("Please select a hub");
-      return;
-    }
-
-    if (stops.length === 0) {
-      toast.error("Please add at least one stop");
+    if (selectedOrderIds.length === 0) {
+      toast.error("Select at least one order to build this route");
       return;
     }
 
@@ -156,7 +95,7 @@ export default function NewRoutePage() {
       const res = await fetch("/api/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, stops }),
+        body: JSON.stringify({ ...form, orderIds: selectedOrderIds }),
       });
 
       const data = await res.json();
@@ -166,7 +105,7 @@ export default function NewRoutePage() {
         return;
       }
 
-      toast.success("Route created successfully!");
+      toast.success("Route created — stops sequenced automatically!");
       router.push("/dashboard/routes");
     } catch {
       toast.error("Something went wrong");
@@ -195,7 +134,7 @@ export default function NewRoutePage() {
         <div>
           <h1 className="text-3xl font-bold text-white">New Route</h1>
           <p className="mt-1" style={{ color: "var(--muted-foreground)" }}>
-            Assign shipments to a driver route
+            Select orders below — stops will be sequenced automatically for the shortest path
           </p>
         </div>
       </div>
@@ -284,102 +223,84 @@ export default function NewRoutePage() {
           </div>
         </div>
 
-        {/* Assign Shipments */}
+        {/* Orders checklist */}
         <div
           className="rounded-2xl p-6 space-y-4"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         >
-          <div>
+          <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">
-              Assign Shipments
+              Unassigned Orders ({orders.length})
             </h2>
-            <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>
-              Select confirmed shipments to add to this route
-            </p>
+            <span className="text-sm" style={{ color: "var(--gold)" }}>
+              {selectedOrderIds.length} selected
+            </span>
           </div>
 
-          {shipments.length === 0 ? (
-            <div
-              className="rounded-xl p-6 text-center"
-              style={{ background: "var(--background)" }}
-            >
-              <Package
-                size={32}
-                className="mx-auto mb-2"
-                style={{ color: "var(--muted-foreground)" }}
-              />
-              <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                No unassigned shipments available. Confirm some orders first.
+          {orders.length === 0 ? (
+            <div className="text-center py-8">
+              <Package size={32} className="mx-auto mb-2" style={{ color: "var(--muted-foreground)" }} />
+              <p style={{ color: "var(--muted-foreground)" }}>
+                No unassigned orders right now.
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {shipments.map((shipment) => {
-                const isSelected = selectedShipments.includes(shipment.id);
-                const destination = shipment.order.destination;
+              {orders.map((order) => {
+                const selected = selectedOrderIds.includes(order.id);
                 return (
                   <button
-                    key={shipment.id}
+                    key={order.id}
                     type="button"
-                    onClick={() => toggleShipment(shipment)}
-                    className="w-full text-left rounded-xl p-4 transition"
+                    onClick={() => toggleOrder(order.id)}
+                    className="w-full flex items-center gap-3 p-4 rounded-xl text-left transition"
                     style={{
-                      background: isSelected
-                        ? "rgba(200,146,42,0.1)"
-                        : "var(--background)",
-                      border: isSelected
+                      background: selected ? "rgba(200,146,42,0.1)" : "var(--background)",
+                      border: selected
                         ? "1px solid rgba(200,146,42,0.4)"
                         : "1px solid var(--border)",
                     }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center"
-                          style={{
-                            background: isSelected
-                              ? "rgba(200,146,42,0.2)"
-                              : "var(--muted)",
-                          }}
-                        >
-                          {isSelected ? (
-                            <CheckCircle
-                              size={16}
-                              style={{ color: "var(--gold)" }}
-                            />
-                          ) : (
-                            <Package
-                              size={16}
-                              style={{ color: "var(--muted-foreground)" }}
-                            />
-                          )}
-                        </div>
-                        <div>
-                          <p
-                            className="font-mono text-sm font-semibold"
-                            style={{ color: "var(--gold)" }}
-                          >
-                            {shipment.trackingNumber}
-                          </p>
-                          <p className="text-white text-sm">
-                            {shipment.order.recipientName}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className="text-sm"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
-                          {destination.address}
+                    <div
+                      className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+                      style={{
+                        background: selected ? "var(--gold)" : "transparent",
+                        border: selected ? "none" : "1px solid var(--border)",
+                      }}
+                    >
+                      {selected && (
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                          <path
+                            d="M2 6L5 9L10 3"
+                            stroke="white"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+
+                    <MapPin size={16} style={{ color: "var(--muted-foreground)" }} className="shrink-0" />
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium text-sm truncate">
+                        {order.recipientName}
+                      </p>
+                      <p className="text-xs truncate" style={{ color: "var(--muted-foreground)" }}>
+                        {order.destination?.address}, {order.destination?.city}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p className="font-mono text-xs" style={{ color: "var(--gold)" }}>
+                        {order.trackingNumber}
+                      </p>
+                      {order.deliveryFee && (
+                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                          R{order.deliveryFee}
                         </p>
-                        <p
-                          className="text-xs"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
-                          {destination.city}
-                        </p>
-                      </div>
+                      )}
                     </div>
                   </button>
                 );
@@ -388,168 +309,16 @@ export default function NewRoutePage() {
           )}
         </div>
 
-        {/* Stops */}
-        <div
-          className="rounded-2xl p-6 space-y-4"
-          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Stops ({stops.length})
-              </h2>
-              <p className="text-sm mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-                Shipment stops are added automatically above
-              </p>
-            </div>
-            <Button
-              type="button"
-              onClick={addManualStop}
-              className="text-sm font-semibold text-white"
-              style={{ background: "var(--gold)" }}
-            >
-              <Plus size={16} className="mr-1" />
-              Manual Stop
-            </Button>
-          </div>
-
-          {stops.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-              Select shipments above or add a manual stop.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {stops.map((stop, index) => (
-                <div
-                  key={index}
-                  className="rounded-xl p-4 space-y-3"
-                  style={{
-                    background: "var(--background)",
-                    border: stop.shipmentId
-                      ? "1px solid rgba(200,146,42,0.3)"
-                      : "1px solid var(--border)",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-sm font-semibold"
-                        style={{ color: "var(--gold)" }}
-                      >
-                        Stop {stop.sequence}
-                      </span>
-                      {stop.trackingNumber && (
-                        <span
-                          className="text-xs font-mono px-2 py-0.5 rounded-full"
-                          style={{
-                            background: "rgba(200,146,42,0.1)",
-                            color: "var(--gold)",
-                          }}
-                        >
-                          {stop.trackingNumber}
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeStop(index)}
-                      className="p-1 rounded-lg hover:bg-red-500/10 transition"
-                      style={{ color: "#ef4444" }}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-
-                  {stop.shipmentId ? (
-                    // Shipment stop — show read-only info
-                    <div className="space-y-1">
-                      <p className="text-white text-sm font-medium">
-                        {stop.contactName}
-                      </p>
-                      <p
-                        className="text-sm"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
-                        {stop.address}, {stop.city}
-                      </p>
-                      <p
-                        className="text-sm"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
-                        {stop.contactPhone}
-                      </p>
-                    </div>
-                  ) : (
-                    // Manual stop — editable
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-white text-sm">Type</Label>
-                        <Select
-                          value={stop.type}
-                          onValueChange={(v) => updateStop(index, "type", v)}
-                        >
-                          <SelectTrigger style={inputStyle}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="PICKUP">Pickup</SelectItem>
-                            <SelectItem value="DELIVERY">Delivery</SelectItem>
-                            <SelectItem value="HUB">Hub</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-white text-sm">Contact Name</Label>
-                        <Input
-                          placeholder="John Doe"
-                          value={stop.contactName}
-                          onChange={(e) => updateStop(index, "contactName", e.target.value)}
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-white text-sm">Address *</Label>
-                        <Input
-                          placeholder="123 Main Street"
-                          value={stop.address}
-                          onChange={(e) => updateStop(index, "address", e.target.value)}
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-white text-sm">City *</Label>
-                        <Input
-                          placeholder="Cape Town"
-                          value={stop.city}
-                          onChange={(e) => updateStop(index, "city", e.target.value)}
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-white text-sm">Contact Phone</Label>
-                        <Input
-                          placeholder="+27 82 000 0000"
-                          value={stop.contactPhone}
-                          onChange={(e) => updateStop(index, "contactPhone", e.target.value)}
-                          style={inputStyle}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
         <Button
           type="submit"
-          disabled={loading}
+          disabled={loading || selectedOrderIds.length === 0}
           className="w-full h-12 font-semibold text-white text-base"
           style={{ background: "var(--gold)" }}
         >
           {loading && <Loader2 size={18} className="animate-spin mr-2" />}
-          Create Route
+          {selectedOrderIds.length === 0
+            ? "Select orders to build a route"
+            : `Create Route with ${selectedOrderIds.length} Stop${selectedOrderIds.length > 1 ? "s" : ""}`}
         </Button>
       </form>
     </div>

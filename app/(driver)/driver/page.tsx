@@ -8,6 +8,7 @@ import {
   XCircle,
   Phone,
   Truck,
+  Wallet,
 } from "lucide-react";
 
 const STOP_STATUS_COLORS: Record<string, string> = {
@@ -33,8 +34,19 @@ export default async function DriverHomePage() {
           },
         },
         include: {
-          stops: { orderBy: { sequence: "asc" } },
           hub: true,
+          stops: {
+            orderBy: { sequence: "asc" },
+            include: {
+              shipment: {
+                include: {
+                  order: {
+                    select: { driverPayout: true },
+                  },
+                },
+              },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -43,12 +55,21 @@ export default async function DriverHomePage() {
   });
 
   const todayRoute = driver?.routes[0] ?? null;
-  const pendingStops = todayRoute?.stops.filter(
-    (s) => s.status === "PENDING"
-  ) ?? [];
-  const completedStops = todayRoute?.stops.filter(
-    (s) => s.status === "COMPLETED"
-  ) ?? [];
+  const pendingStops = todayRoute?.stops.filter((s) => s.status === "PENDING") ?? [];
+  const completedStops = todayRoute?.stops.filter((s) => s.status === "COMPLETED") ?? [];
+
+  // Only ever sum/display driverPayout — never deliveryFee or platformFee
+  const totalEarnings =
+    todayRoute?.stops.reduce((sum, stop) => {
+      const payout = stop.shipment?.order?.driverPayout;
+      return sum + (payout ? Number(payout) : 0);
+    }, 0) ?? 0;
+
+  const earnedSoFar =
+    completedStops.reduce((sum, stop) => {
+      const payout = stop.shipment?.order?.driverPayout;
+      return sum + (payout ? Number(payout) : 0);
+    }, 0) ?? 0;
 
   return (
     <div className="space-y-6 py-8">
@@ -97,20 +118,36 @@ export default async function DriverHomePage() {
           className="rounded-2xl p-12 text-center"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         >
-          <MapPin
-            size={40}
-            className="mx-auto mb-3"
-            style={{ color: "var(--gold)" }}
-          />
-          <h2 className="text-lg font-bold text-white mb-1">
-            No route assigned today
-          </h2>
+          <MapPin size={40} className="mx-auto mb-3" style={{ color: "var(--gold)" }} />
+          <h2 className="text-lg font-bold text-white mb-1">No route assigned today</h2>
           <p style={{ color: "var(--muted-foreground)" }}>
             Check back later or contact your dispatcher
           </p>
         </div>
       ) : (
         <div className="space-y-4">
+          {/* Earnings */}
+          <div
+            className="rounded-2xl p-5"
+            style={{ background: "rgba(200,146,42,0.1)", border: "1px solid rgba(200,146,42,0.3)" }}
+          >
+            <div className="flex items-center gap-3 mb-1">
+              <Wallet size={18} style={{ color: "var(--gold)" }} />
+              <p className="text-sm font-medium" style={{ color: "var(--muted-foreground)" }}>
+                Today's Earnings
+              </p>
+            </div>
+            <p className="text-3xl font-bold text-white">
+              R{earnedSoFar.toFixed(2)}
+              <span
+                className="text-lg font-normal ml-2"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                / R{totalEarnings.toFixed(2)}
+              </span>
+            </p>
+          </div>
+
           {/* Progress */}
           <div
             className="rounded-2xl p-5"
@@ -118,10 +155,7 @@ export default async function DriverHomePage() {
           >
             <div className="flex justify-between mb-3">
               <p className="font-semibold text-white">Today's Route</p>
-              <span
-                className="text-sm"
-                style={{ color: "var(--muted-foreground)" }}
-              >
+              <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                 {completedStops.length}/{todayRoute.stops.length} stops
               </span>
             </div>
@@ -132,9 +166,11 @@ export default async function DriverHomePage() {
               <div
                 className="h-full rounded-full transition-all"
                 style={{
-                  width: `${todayRoute.stops.length > 0
-                    ? (completedStops.length / todayRoute.stops.length) * 100
-                    : 0}%`,
+                  width: `${
+                    todayRoute.stops.length > 0
+                      ? (completedStops.length / todayRoute.stops.length) * 100
+                      : 0
+                  }%`,
                   background: "var(--gold)",
                 }}
               />
@@ -148,7 +184,7 @@ export default async function DriverHomePage() {
           >
             <p className="font-semibold text-white mb-4">Stops</p>
             <div className="space-y-3">
-              {todayRoute.stops.map((stop, index) => {
+              {todayRoute.stops.map((stop) => {
                 const address = stop.address as any;
                 const color = STOP_STATUS_COLORS[stop.status];
                 const Icon =
@@ -157,6 +193,7 @@ export default async function DriverHomePage() {
                     : stop.status === "FAILED"
                     ? XCircle
                     : Circle;
+                const payout = stop.shipment?.order?.driverPayout;
 
                 return (
                   <Link
@@ -174,37 +211,33 @@ export default async function DriverHomePage() {
                         >
                           Stop {stop.sequence} · {stop.type}
                         </span>
-                        <span
-                          className="text-xs font-semibold"
-                          style={{ color }}
-                        >
+                        <span className="text-xs font-semibold" style={{ color }}>
                           {stop.status}
                         </span>
                       </div>
-                      <p className="text-white font-medium mt-0.5">
-                        {address?.address}
-                      </p>
-                      <p
-                        className="text-sm"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
+                      <p className="text-white font-medium mt-0.5">{address?.address}</p>
+                      <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                         {address?.city}
                       </p>
-                      {stop.contactName && (
-                        <div className="flex items-center gap-2 mt-1">
-                          <Phone
-                            size={12}
-                            style={{ color: "var(--muted-foreground)" }}
-                          />
+                      <div className="flex items-center justify-between mt-1">
+                        {stop.contactName && (
+                          <div className="flex items-center gap-2">
+                            <Phone size={12} style={{ color: "var(--muted-foreground)" }} />
+                            <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                              {stop.contactName}{" "}
+                              {stop.contactPhone && `· ${stop.contactPhone}`}
+                            </span>
+                          </div>
+                        )}
+                        {payout != null && (
                           <span
-                            className="text-xs"
-                            style={{ color: "var(--muted-foreground)" }}
+                            className="text-xs font-semibold"
+                            style={{ color: "var(--gold)" }}
                           >
-                            {stop.contactName}{" "}
-                            {stop.contactPhone && `· ${stop.contactPhone}`}
+                            R{Number(payout).toFixed(2)}
                           </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </Link>
                 );
