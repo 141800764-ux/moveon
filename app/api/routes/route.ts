@@ -64,17 +64,18 @@ export async function POST(request: NextRequest) {
           ? new Date(`${date}T${plannedEndAt}`)
           : null,
         stops: {
-          create: stops.map((stop: any) => ({
-            sequence: stop.sequence,
-            type: stop.type,
-            address: { address: stop.address, city: stop.city },
-            latitude: 0,
-            longitude: 0,
-            contactName: stop.contactName || null,
-            contactPhone: stop.contactPhone || null,
-            status: "PENDING",
-          })),
-        },
+  create: stops.map((stop: any) => ({
+    sequence: stop.sequence,
+    type: stop.type,
+    address: { address: stop.address, city: stop.city },
+    latitude: 0,
+    longitude: 0,
+    contactName: stop.contactName || null,
+    contactPhone: stop.contactPhone || null,
+    shipmentId: stop.shipmentId || null,
+    status: "PENDING",
+  })),
+},
       },
       include: { stops: true },
     });
