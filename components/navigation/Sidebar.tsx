@@ -52,59 +52,96 @@ export default function Sidebar({ user }: { user: any }) {
 
   return (
     <>
-      {/* Mobile Hamburger */}
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed top-5 left-5 z-50 lg:hidden p-2 rounded-lg"
+      {/* Mobile top bar */}
+      <div
+        className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 lg:hidden"
         style={{
           background: "var(--card)",
-          border: "1px solid var(--border)",
+          borderBottom: "1px solid var(--border)",
         }}
       >
-        <Menu size={24} />
-      </button>
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <Image
+            src="/images/MoveOnLogo.png"
+            alt="MoveOn"
+            width={36}
+            height={36}
+            className="rounded-lg"
+          />
+          <span
+            className="text-lg font-bold"
+            style={{ color: "var(--gold)" }}
+          >
+            MoveOn
+          </span>
+        </Link>
+        <button
+          onClick={() => setOpen(true)}
+          className="p-2 rounded-xl transition hover:bg-white/5"
+          style={{ color: "var(--foreground)" }}
+        >
+          <Menu size={22} />
+        </button>
+      </div>
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-full w-64 flex flex-col transition-transform duration-300 z-50 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0`}
+        className={`fixed left-0 top-0 h-full w-64 flex flex-col z-50 transition-transform duration-300 ${
+          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
         style={{
           background: "var(--card)",
           borderRight: "1px solid var(--border)",
         }}
       >
-        {/* Mobile Close */}
-        <div className="flex justify-end p-4 lg:hidden">
-          <button onClick={() => setOpen(false)}>
-            <X size={24} />
+        {/* Logo — desktop */}
+        <div
+          className="px-5 py-5 flex items-center gap-3"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0"
+            style={{ background: "rgba(200,146,42,0.15)" }}
+          >
+            <Image
+              src="/images/MoveOnLogo.png"
+              alt="MoveOn"
+              width={40}
+              height={40}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p
+              className="text-xl font-black tracking-tight"
+              style={{ color: "var(--gold)" }}
+            >
+              MoveOn
+            </p>
+            <p
+              className="text-xs"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Logistics Platform
+            </p>
+          </div>
+          {/* Close button — mobile only */}
+          <button
+            onClick={() => setOpen(false)}
+            className="lg:hidden p-1 rounded-lg hover:bg-white/5 transition"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <X size={20} />
           </button>
         </div>
 
-        {/* Logo */}
-        <div
-          className="p-6 flex items-center gap-3"
-          style={{ borderBottom: "1px solid var(--border)" }}
-        >
-          <Image
-            src="/images/MoveOnLogo.png"
-            alt="MoveOn"
-            width={100}
-            height={76}
-            className="rounded-lg"
-          />
-          <span
-            className="text-xl font-bold"
-            style={{ color: "var(--gold)" }}
-          >
-            MoveOnGo
-          </span>
-        </div>
-
         {/* Nav */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {navItems.map((item) => {
-            const active = pathname === item.href;
+            const active =
+              item.href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname.startsWith(item.href);
 
             return (
               <Link
@@ -133,7 +170,7 @@ export default function Sidebar({ user }: { user: any }) {
           {isAdmin && (
             <>
               <div
-                className="pt-3 mt-3 px-3 text-xs font-semibold uppercase tracking-wider"
+                className="pt-3 mt-2 px-3 text-xs font-semibold uppercase tracking-wider"
                 style={{
                   color: "var(--muted-foreground)",
                   borderTop: "1px solid var(--border)",
@@ -141,10 +178,8 @@ export default function Sidebar({ user }: { user: any }) {
               >
                 Admin
               </div>
-
               {adminNavItems.map((item) => {
                 const active = pathname === item.href;
-
                 return (
                   <Link
                     key={item.href}
@@ -174,44 +209,38 @@ export default function Sidebar({ user }: { user: any }) {
 
         {/* User */}
         <div
-          className="p-4"
+          className="p-3"
           style={{ borderTop: "1px solid var(--border)" }}
         >
-          <div className="flex items-center gap-3 px-3 py-2 mb-2">
+          <div className="flex items-center gap-3 px-3 py-2 mb-1">
             {user?.image ? (
               <Image
                 src={user.image}
                 alt={user.name || "User"}
-                width={32}
-                height={32}
-                className="rounded-full"
+                width={34}
+                height={34}
+                className="rounded-full shrink-0"
               />
             ) : (
               <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
-                style={{
-                  background: "var(--gold)",
-                  color: "white",
-                }}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                style={{ background: "var(--gold)", color: "white" }}
               >
                 {user?.name?.[0] || "U"}
               </div>
             )}
-
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-sm font-semibold text-white truncate">
                 {user?.name}
               </p>
-
               <p
-                className="text-xs truncate"
+                className="text-xs truncate capitalize"
                 style={{ color: "var(--muted-foreground)" }}
               >
-                {user?.role?.toLowerCase()}
+                {user?.role?.toLowerCase().replace(/_/g, " ")}
               </p>
             </div>
           </div>
-
           <button
             onClick={() => signOut({ callbackUrl: "/sign-in" })}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full transition-all hover:bg-red-500/10"
@@ -223,10 +252,10 @@ export default function Sidebar({ user }: { user: any }) {
         </div>
       </aside>
 
-      {/* Mobile Overlay */}
+      {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
           onClick={() => setOpen(false)}
         />
       )}
