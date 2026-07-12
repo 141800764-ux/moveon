@@ -2,26 +2,40 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { Package, Plus, Truck, Clock } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 export default async function CustomerHomePage() {
   const session = await auth();
 
-  const customer = await prisma.customer.findUnique({
+  let customer = await prisma.customer.findUnique({
     where: { userId: session?.user?.id },
-    include: {
-      orders: {
-        orderBy: { createdAt: "desc" },
-        take: 3,
-        include: { shipments: true },
-      },
-    },
   });
 
-  const totalOrders = customer?.orders.length ?? 0;
-  const activeOrders = customer?.orders.filter(
-    (o) => o.status !== "DELIVERED" && o.status !== "CANCELLED"
-  ).length ?? 0;
+  if (!customer) {
+    customer = await prisma.customer.create({
+      data: {
+        userId: session?.user?.id!,
+        fullName: session?.user?.name || "Customer",
+      },
+    });
+  }
+
+  const orders = await prisma.order.findMany({
+    where: { customerId: customer.id },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+    include: { shipments: true },
+  });
+
+  const totalOrders = await prisma.order.count({
+    where: { customerId: customer.id },
+  });
+
+  const activeOrders = await prisma.order.count({
+    where: {
+      customerId: customer.id,
+      status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
+    },
+  });
 
   return (
     <div className="space-y-8 py-8">
@@ -108,7 +122,7 @@ export default async function CustomerHomePage() {
       </div>
 
       {/* Recent orders */}
-      {customer?.orders && customer.orders.length > 0 && (
+      {orders.length > 0 && (
         <div
           className="rounded-2xl p-6"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
@@ -124,7 +138,7 @@ export default async function CustomerHomePage() {
             </Link>
           </div>
           <div className="space-y-3">
-            {customer.orders.map((order) => {
+            {orders.map((order) => {
               const destination = order.destination as any;
               return (
                 <Link
@@ -134,8 +148,13 @@ export default async function CustomerHomePage() {
                   style={{ borderBottom: "1px solid var(--border)" }}
                 >
                   <div>
-                    <p className="text-white font-medium">{order.recipientName}</p>
-                    <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    <p className="text-white font-medium">
+                      {order.recipientName}
+                    </p>
+                    <p
+                      className="text-sm"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
                       {destination?.city}
                     </p>
                   </div>

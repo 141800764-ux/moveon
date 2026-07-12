@@ -17,17 +17,26 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 export default async function CustomerOrdersPage() {
   const session = await auth();
 
-  const customer = await prisma.customer.findUnique({
+  // Find or create customer profile
+  let customer = await prisma.customer.findUnique({
     where: { userId: session?.user?.id },
-    include: {
-      orders: {
-        orderBy: { createdAt: "desc" },
-        include: { shipments: true },
-      },
-    },
   });
 
-  const orders = customer?.orders ?? [];
+  if (!customer) {
+    customer = await prisma.customer.create({
+      data: {
+        userId: session?.user?.id!,
+        fullName: session?.user?.name || "Customer",
+      },
+    });
+  }
+
+  // Fetch orders directly by customerId
+  const orders = await prisma.order.findMany({
+    where: { customerId: customer.id },
+    orderBy: { createdAt: "desc" },
+    include: { shipments: true },
+  });
 
   return (
     <div className="space-y-6 py-8">
@@ -51,16 +60,23 @@ export default async function CustomerOrdersPage() {
 
       {orders.length === 0 ? (
         <div
-          className="rounded-2xl p-16 text-center"
+          className="rounded-2xl p-12 text-center"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         >
-          <Package size={48} className="mx-auto mb-4" style={{ color: "var(--gold)" }} />
+          <Package
+            size={48}
+            className="mx-auto mb-4"
+            style={{ color: "var(--gold)" }}
+          />
           <h2 className="text-xl font-bold text-white mb-2">No orders yet</h2>
           <p className="mb-6" style={{ color: "var(--muted-foreground)" }}>
             Place your first order to get started
           </p>
           <Link href="/customer/orders/new">
-            <Button className="font-semibold text-white" style={{ background: "var(--gold)" }}>
+            <Button
+              className="font-semibold text-white"
+              style={{ background: "var(--gold)" }}
+            >
               <Plus size={16} className="mr-2" />
               Place Order
             </Button>
@@ -69,7 +85,8 @@ export default async function CustomerOrdersPage() {
       ) : (
         <div className="space-y-3">
           {orders.map((order) => {
-            const colors = STATUS_COLORS[order.status] ?? STATUS_COLORS.PENDING;
+            const colors =
+              STATUS_COLORS[order.status] ?? STATUS_COLORS.PENDING;
             const destination = order.destination as any;
             const origin = order.origin as any;
             return (
@@ -77,11 +94,14 @@ export default async function CustomerOrdersPage() {
                 key={order.id}
                 href={`/customer/orders/${order.id}`}
                 className="block rounded-2xl p-5 hover:border-orange-500/30 transition"
-                style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                style={{
+                  background: "var(--card)",
+                  border: "1px solid var(--border)",
+                }}
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className="font-mono text-sm font-semibold"
                         style={{ color: "var(--gold)" }}
@@ -90,7 +110,10 @@ export default async function CustomerOrdersPage() {
                       </span>
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: colors.bg, color: colors.color }}
+                        style={{
+                          background: colors.bg,
+                          color: colors.color,
+                        }}
                       >
                         {order.status.replace(/_/g, " ")}
                       </span>
@@ -98,23 +121,27 @@ export default async function CustomerOrdersPage() {
                     <p className="text-white font-medium mt-1">
                       To: {order.recipientName}
                     </p>
-                    <p className="text-sm mt-0.5" style={{ color: "var(--muted-foreground)" }}>
+                    <p
+                      className="text-sm mt-0.5"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
                       {origin?.city} → {destination?.city}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                  <div className="text-right shrink-0">
+                    <p
+                      className="text-sm"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
                       {new Date(order.createdAt).toLocaleDateString("en-ZA")}
                     </p>
                     {order.shipments.length > 0 && (
-                      <Link
-                        href={`/track/${order.shipments[0].trackingNumber}`}
-                        className="text-xs mt-1 block hover:underline"
+                      <span
+                        className="text-xs mt-1 block"
                         style={{ color: "var(--gold)" }}
-                        onClick={(e) => e.stopPropagation()}
                       >
                         Track →
-                      </Link>
+                      </span>
                     )}
                   </div>
                 </div>
