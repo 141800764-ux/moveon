@@ -14,14 +14,15 @@ export default async function CustomerLayout({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
+      {/* Top navbar */}
       <nav
-        className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex items-center justify-between"
+        className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 py-3 flex items-center justify-between"
         style={{
           background: "var(--card)",
           borderBottom: "1px solid var(--border)",
         }}
       >
-        <Link href="/customer" className="flex items-center gap-2">
+        <Link href="/customer" className="flex items-center gap-2 shrink-0">
           <Image
             src="/images/MoveOnLogo.png"
             alt="MoveOn"
@@ -35,7 +36,9 @@ export default async function CustomerLayout({
         </Link>
         <CustomerNav user={session.user} />
       </nav>
-      <main className="pt-20 px-6 pb-12 max-w-4xl mx-auto">
+
+      {/* pb-24 on mobile for bottom nav, pb-12 on desktop */}
+      <main className="pt-20 px-4 sm:px-6 pb-24 sm:pb-12 max-w-4xl mx-auto">
         {children}
       </main>
     </div>
