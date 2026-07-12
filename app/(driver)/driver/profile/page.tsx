@@ -21,6 +21,10 @@ export default async function DriverProfilePage() {
     );
   }
 
+  const banking = await prisma.driverBankingDetails.findUnique({
+    where: { driverId: driver.id },
+  });
+
   const licenseExpired = new Date(driver.licenseExpiresAt) < new Date();
   const licenseExpiringSoon =
     !licenseExpired &&
@@ -54,9 +58,6 @@ export default async function DriverProfilePage() {
             </span>
           </div>
         )}
-        const banking = await prisma.driverBankingDetails.findUnique({
-  where: { driverId: driver.id },
-});
       </div>
 
       {/* Stats */}
@@ -139,6 +140,7 @@ export default async function DriverProfilePage() {
           )}
         </div>
       </div>
+
       <DriverBankingForm banking={banking} />
     </div>
   );
