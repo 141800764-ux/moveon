@@ -33,6 +33,7 @@ const navItems = [
   { href: "/dashboard/hubs", label: "Hubs", icon: MapPin },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard/payouts", label: "Payouts", icon: DollarSign },
 ];
 
 const adminNavItems = [

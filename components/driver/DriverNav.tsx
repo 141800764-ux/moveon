@@ -8,6 +8,7 @@ import { Route, User, LogOut } from "lucide-react";
 const navItems = [
   { href: "/driver", label: "My Route", icon: Route },
   { href: "/driver/profile", label: "Profile", icon: User },
+  { href: "/driver/earnings", label: "Earnings", icon: DollarSign },
 ];
 
 export default function DriverNav({ user }: { user: any }) {

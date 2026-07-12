@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Phone, CreditCard, Truck, Star, Package } from "lucide-react";
+import DriverBankingForm from "@/components/driver/DriverBankingForm";
 
 export default async function DriverProfilePage() {
   const session = await auth();
@@ -53,6 +54,9 @@ export default async function DriverProfilePage() {
             </span>
           </div>
         )}
+        const banking = await prisma.driverBankingDetails.findUnique({
+  where: { driverId: driver.id },
+});
       </div>
 
       {/* Stats */}
@@ -135,6 +139,7 @@ export default async function DriverProfilePage() {
           )}
         </div>
       </div>
+      <DriverBankingForm banking={banking} />
     </div>
   );
 }

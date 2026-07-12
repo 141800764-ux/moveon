@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+function getWeekBounds() {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sunday
+  const diff = now.getDate() - day;
+  const weekStart = new Date(now.setDate(diff));
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  return { weekStart, weekEnd };
+}
+
 export async function GET(
   _: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -54,7 +66,6 @@ export async function PATCH(
       include: { shipment: true },
     });
 
-    // Cascade the status change to the linked Shipment and Order
     if (stop.shipmentId && (status === "COMPLETED" || status === "FAILED")) {
       const shipmentStatus = status === "COMPLETED" ? "DELIVERED" : "FAILED";
       const orderStatus = status === "COMPLETED" ? "DELIVERED" : "FAILED";
@@ -69,7 +80,7 @@ export async function PATCH(
         },
       });
 
-      await prisma.order.update({
+      const order = await prisma.order.update({
         where: { id: shipment.orderId },
         data: { status: orderStatus },
       });
@@ -80,7 +91,7 @@ export async function PATCH(
           type: status === "COMPLETED" ? "DELIVERED" : "DELIVERY_FAILED",
           description:
             status === "COMPLETED"
-              ? "Package delivered successfully"
+              ? "Package delivered successfully by driver"
               : `Delivery failed: ${failureReason || "No reason provided"}`,
           actor: "DRIVER",
         },
@@ -93,10 +104,26 @@ export async function PATCH(
         });
 
         if (route?.driverId) {
+          // Update driver delivery count
           await prisma.driver.update({
             where: { id: route.driverId },
             data: { totalDeliveries: { increment: 1 } },
           });
+
+          // Record earnings for this week
+          if (order.driverPayout) {
+            const { weekStart, weekEnd } = getWeekBounds();
+            await prisma.driverEarning.create({
+              data: {
+                driverId: route.driverId,
+                orderId: order.id,
+                amount: order.driverPayout,
+                weekStart,
+                weekEnd,
+                isPaid: false,
+              },
+            });
+          }
         }
       }
     }
