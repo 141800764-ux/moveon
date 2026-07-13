@@ -19,6 +19,7 @@ import {
   ClipboardCheck,
   Menu,
   X,
+  DollarSign,
 } from "lucide-react";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "CARRIER_ADMIN", "DISPATCHER"];
@@ -32,8 +33,8 @@ const navItems = [
   { href: "/dashboard/routes", label: "Routes", icon: Route },
   { href: "/dashboard/hubs", label: "Hubs", icon: MapPin },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
   { href: "/dashboard/payouts", label: "Payouts", icon: DollarSign },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 const adminNavItems = [
@@ -95,7 +96,7 @@ export default function Sidebar({ user }: { user: any }) {
           borderRight: "1px solid var(--border)",
         }}
       >
-        {/* Logo — desktop */}
+        {/* Logo */}
         <div
           className="px-5 py-5 flex items-center gap-3"
           style={{ borderBottom: "1px solid var(--border)" }}
@@ -126,7 +127,6 @@ export default function Sidebar({ user }: { user: any }) {
               Logistics Platform
             </p>
           </div>
-          {/* Close button — mobile only */}
           <button
             onClick={() => setOpen(false)}
             className="lg:hidden p-1 rounded-lg hover:bg-white/5 transition"
@@ -154,9 +154,7 @@ export default function Sidebar({ user }: { user: any }) {
                   background: active
                     ? "rgba(200,146,42,0.15)"
                     : "transparent",
-                  color: active
-                    ? "var(--gold)"
-                    : "var(--muted-foreground)",
+                  color: active ? "var(--gold)" : "var(--muted-foreground)",
                   border: active
                     ? "1px solid rgba(200,146,42,0.3)"
                     : "1px solid transparent",
@@ -209,10 +207,7 @@ export default function Sidebar({ user }: { user: any }) {
         </nav>
 
         {/* User */}
-        <div
-          className="p-3"
-          style={{ borderTop: "1px solid var(--border)" }}
-        >
+        <div className="p-3" style={{ borderTop: "1px solid var(--border)" }}>
           <div className="flex items-center gap-3 px-3 py-2 mb-1">
             {user?.image ? (
               <Image
