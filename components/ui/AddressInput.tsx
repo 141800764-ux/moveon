@@ -34,6 +34,8 @@ type Props = {
   style?: React.CSSProperties;
 };
 
+const LOCATIONIQ_KEY = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
+
 export default function AddressInput({
   placeholder,
   value,
@@ -67,30 +69,27 @@ export default function AddressInput({
       return;
     }
 
+    if (!LOCATIONIQ_KEY) {
+      console.error("Missing NEXT_PUBLIC_LOCATIONIQ_API_KEY");
+      return;
+    }
+
     setLoading(true);
     try {
-      // Try with South Africa first, then without country restriction
       const encoded = encodeURIComponent(query);
-      const url = `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=8&addressdetails=1&countrycodes=za&accept-language=en`;
+      const url = `https://api.locationiq.com/v1/autocomplete?key=${LOCATIONIQ_KEY}&q=${encoded}&countrycodes=za&format=json&limit=8&addressdetails=1`;
 
-      const res = await fetch(url, {
-        headers: { "User-Agent": "MoveOn-Logistics-App/1.0" },
-      });
-      const data = await res.json();
+      const res = await fetch(url);
 
-      if (data.length === 0) {
-        // Retry without country restriction
-        const res2 = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encoded}+South+Africa&format=json&limit=8&addressdetails=1&accept-language=en`,
-          { headers: { "User-Agent": "MoveOn-Logistics-App/1.0" } }
-        );
-        const data2 = await res2.json();
-        setSuggestions(data2);
-        setOpen(data2.length > 0);
-      } else {
-        setSuggestions(data);
-        setOpen(data.length > 0);
+      if (!res.ok) {
+        setSuggestions([]);
+        setOpen(false);
+        return;
       }
+
+      const data = await res.json();
+      setSuggestions(Array.isArray(data) ? data : []);
+      setOpen(Array.isArray(data) && data.length > 0);
     } catch {
       setSuggestions([]);
     } finally {
@@ -123,12 +122,11 @@ export default function AddressInput({
   }
 
   function handleSelect(suggestion: Suggestion) {
-    const addr = suggestion.address;
+    const addr = suggestion.address || ({} as Suggestion["address"]);
     const street = getStreet(addr);
     const city = getCity(addr);
     const fullAddress = suggestion.display_name;
 
-    // Show a clean version in the input
     const parts = suggestion.display_name.split(",");
     const displayValue = parts.slice(0, 3).join(",").trim();
 
