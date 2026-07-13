@@ -3,7 +3,7 @@
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Route, User, LogOut } from "lucide-react";
+import { Route, User, LogOut, DollarSign } from "lucide-react";
 
 const navItems = [
   { href: "/driver", label: "My Route", icon: Route },
