@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, MapPin } from "lucide-react";
 
 type Suggestion = {
   display_name: string;
@@ -10,10 +10,13 @@ type Suggestion = {
   address: {
     road?: string;
     suburb?: string;
+    neighbourhood?: string;
     city?: string;
     town?: string;
     village?: string;
+    municipality?: string;
     postcode?: string;
+    state?: string;
   };
 };
 
@@ -26,6 +29,7 @@ type Props = {
     city: string;
     lat: number;
     lng: number;
+    fullAddress: string;
   }) => void;
   style?: React.CSSProperties;
 };
@@ -45,7 +49,10 @@ export default function AddressInput({
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     }
@@ -54,7 +61,7 @@ export default function AddressInput({
   }, []);
 
   async function fetchSuggestions(query: string) {
-    if (query.length < 3) {
+    if (query.length < 2) {
       setSuggestions([]);
       setOpen(false);
       return;
@@ -62,14 +69,28 @@ export default function AddressInput({
 
     setLoading(true);
     try {
-      const encoded = encodeURIComponent(`${query}, South Africa`);
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&addressdetails=1&countrycodes=za`,
-        { headers: { "User-Agent": "MoveOn-Logistics-App" } }
-      );
+      // Try with South Africa first, then without country restriction
+      const encoded = encodeURIComponent(query);
+      const url = `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=8&addressdetails=1&countrycodes=za&accept-language=en`;
+
+      const res = await fetch(url, {
+        headers: { "User-Agent": "MoveOn-Logistics-App/1.0" },
+      });
       const data = await res.json();
-      setSuggestions(data);
-      setOpen(data.length > 0);
+
+      if (data.length === 0) {
+        // Retry without country restriction
+        const res2 = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encoded}+South+Africa&format=json&limit=8&addressdetails=1&accept-language=en`,
+          { headers: { "User-Agent": "MoveOn-Logistics-App/1.0" } }
+        );
+        const data2 = await res2.json();
+        setSuggestions(data2);
+        setOpen(data2.length > 0);
+      } else {
+        setSuggestions(data);
+        setOpen(data.length > 0);
+      }
     } catch {
       setSuggestions([]);
     } finally {
@@ -80,27 +101,55 @@ export default function AddressInput({
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
     onChange(val);
-
     clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => fetchSuggestions(val), 400);
+    timeoutRef.current = setTimeout(() => fetchSuggestions(val), 350);
+  }
+
+  function getCity(addr: Suggestion["address"]): string {
+    return (
+      addr.city ||
+      addr.town ||
+      addr.municipality ||
+      addr.village ||
+      addr.suburb ||
+      addr.neighbourhood ||
+      addr.state ||
+      ""
+    );
+  }
+
+  function getStreet(addr: Suggestion["address"]): string {
+    return addr.road || addr.suburb || addr.neighbourhood || "";
   }
 
   function handleSelect(suggestion: Suggestion) {
     const addr = suggestion.address;
-    const street = addr.road || "";
-    const city =
-      addr.city || addr.town || addr.village || addr.suburb || "";
+    const street = getStreet(addr);
+    const city = getCity(addr);
+    const fullAddress = suggestion.display_name;
+
+    // Show a clean version in the input
+    const parts = suggestion.display_name.split(",");
+    const displayValue = parts.slice(0, 3).join(",").trim();
 
     onSelect({
-      address: street || suggestion.display_name.split(",")[0],
+      address: street || parts[0]?.trim() || fullAddress,
       city,
       lat: parseFloat(suggestion.lat),
       lng: parseFloat(suggestion.lon),
+      fullAddress,
     });
 
-    onChange(suggestion.display_name.split(",").slice(0, 2).join(","));
+    onChange(displayValue);
     setOpen(false);
     setSuggestions([]);
+  }
+
+  function formatDisplayName(suggestion: Suggestion) {
+    const parts = suggestion.display_name.split(",");
+    const main = parts.slice(0, 2).join(",").trim();
+    const sub = parts.slice(2, 5).join(",").trim();
+    return { main, sub };
   }
 
   return (
@@ -112,6 +161,7 @@ export default function AddressInput({
           onChange={handleChange}
           onFocus={() => suggestions.length > 0 && setOpen(true)}
           placeholder={placeholder}
+          autoComplete="off"
           className="w-full rounded-xl px-3 py-2 text-sm outline-none focus:ring-1"
           style={{
             ...style,
@@ -131,31 +181,47 @@ export default function AddressInput({
 
       {open && suggestions.length > 0 && (
         <div
-          className="absolute z-50 w-full mt-1 rounded-xl overflow-hidden shadow-lg"
+          className="absolute z-50 w-full mt-1 rounded-xl overflow-hidden shadow-xl"
           style={{
             background: "var(--card)",
             border: "1px solid var(--border)",
+            maxHeight: "280px",
+            overflowY: "auto",
           }}
         >
           {suggestions.map((s, i) => {
-            const parts = s.display_name.split(",");
-            const main = parts.slice(0, 2).join(",").trim();
-            const sub = parts.slice(2, 4).join(",").trim();
-
+            const { main, sub } = formatDisplayName(s);
             return (
               <button
                 key={i}
                 type="button"
                 onClick={() => handleSelect(s)}
-                className="w-full text-left px-4 py-3 transition hover:bg-white/5"
-                style={{ borderBottom: i < suggestions.length - 1 ? "1px solid var(--border)" : "none" }}
+                className="w-full text-left px-4 py-3 transition hover:bg-white/5 flex items-start gap-3"
+                style={{
+                  borderBottom:
+                    i < suggestions.length - 1
+                      ? "1px solid var(--border)"
+                      : "none",
+                }}
               >
-                <p className="text-sm text-white font-medium">{main}</p>
-                {sub && (
-                  <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-                    {sub}
+                <MapPin
+                  size={14}
+                  className="shrink-0 mt-0.5"
+                  style={{ color: "var(--gold)" }}
+                />
+                <div className="min-w-0">
+                  <p className="text-sm text-white font-medium truncate">
+                    {main}
                   </p>
-                )}
+                  {sub && (
+                    <p
+                      className="text-xs mt-0.5 truncate"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      {sub}
+                    </p>
+                  )}
+                </div>
               </button>
             );
           })}
