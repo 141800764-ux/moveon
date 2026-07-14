@@ -20,6 +20,7 @@ import {
   Menu,
   X,
   DollarSign,
+  Map,
 } from "lucide-react";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "CARRIER_ADMIN", "DISPATCHER"];
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/payouts", label: "Payouts", icon: DollarSign },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard/map", label: "Live Map", icon: Map },
 ];
 
 const adminNavItems = [
