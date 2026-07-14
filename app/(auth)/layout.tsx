@@ -19,15 +19,15 @@ export default function AuthLayout({
           <Image
             src="/images/MoveOnLogo.png"
             alt="MoveOn"
-            width={48}
-            height={48}
+            width={100}
+            height={100}
             className="rounded-xl"
           />
           <span
             className="text-2xl font-bold"
             style={{ color: "var(--gold)" }}
           >
-            MoveOn
+            MoveOnGo
           </span>
         </div>
 

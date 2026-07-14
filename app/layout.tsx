@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MoveOn — Logistics Platform",
+  title: "MoveOnGo — Logistics Platform",
   description: "Real-time fleet management and delivery tracking",
 };
 
