@@ -77,7 +77,7 @@ export default function AddressInput({
 
       const res = await fetch(
         `https://us1.locationiq.com/v1/autocomplete?key=${key}&q=${encoded}&limit=8&dedupe=1&countrycodes=za&normalizeaddress=1&normalizecity=1&addressdetails=1&accept-language=en`,
-        { headers: { "Accept": "application/json" } }
+        { headers: { Accept: "application/json" } }
       );
 
       if (!res.ok) throw new Error("LocationIQ error");
@@ -86,7 +86,6 @@ export default function AddressInput({
       setSuggestions(Array.isArray(data) ? data : []);
       setOpen(Array.isArray(data) && data.length > 0);
     } catch {
-      // Fallback to Nominatim
       try {
         const encoded = encodeURIComponent(query + " South Africa");
         const res2 = await fetch(
@@ -136,7 +135,6 @@ export default function AddressInput({
     const addr = suggestion.address;
     const streetAddress = getStreetAddress(addr);
     const city = getCity(addr);
-
     const parts = suggestion.display_name.split(",");
     const displayValue = parts.slice(0, 3).join(",").trim();
 
@@ -153,20 +151,85 @@ export default function AddressInput({
     setSuggestions([]);
   }
 
-  function handleManualSubmit() {
+  async function handleManualSubmit() {
     if (!value || !manualCity) return;
 
-    // Geocode just the city for pricing, use typed address as display
-    onSelect({
-      address: value,
-      city: manualCity,
-      lat: 0,
-      lng: 0,
-      fullAddress: `${value}, ${manualCity}, South Africa`,
-    });
+    setLoading(true);
+    try {
+      const key = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
+      const query = encodeURIComponent(`${value}, ${manualCity}, South Africa`);
 
-    setManualMode(false);
-    setOpen(false);
+      const res = await fetch(
+        `https://us1.locationiq.com/v1/search?key=${key}&q=${query}&format=json&limit=1&addressdetails=1`,
+        { headers: { Accept: "application/json" } }
+      );
+
+      const data = await res.json();
+
+      if (Array.isArray(data) && data.length > 0) {
+        const result = data[0];
+        const addr = result.address;
+        const city =
+          addr.city ||
+          addr.town ||
+          addr.municipality ||
+          addr.village ||
+          addr.suburb ||
+          manualCity;
+
+        onSelect({
+          address: value,
+          city,
+          lat: parseFloat(result.lat),
+          lng: parseFloat(result.lon),
+          fullAddress: `${value}, ${manualCity}, South Africa`,
+        });
+      } else {
+        // Fallback to Nominatim
+        const encoded = encodeURIComponent(
+          `${value}, ${manualCity}, South Africa`
+        );
+        const res2 = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`,
+          { headers: { "User-Agent": "MoveOn-Logistics-App/1.0" } }
+        );
+        const data2 = await res2.json();
+
+        if (Array.isArray(data2) && data2.length > 0) {
+          onSelect({
+            address: value,
+            city: manualCity,
+            lat: parseFloat(data2[0].lat),
+            lng: parseFloat(data2[0].lon),
+            fullAddress: `${value}, ${manualCity}, South Africa`,
+          });
+        } else {
+          // Last resort — geocode just the city center
+          const cityQuery = encodeURIComponent(`${manualCity}, South Africa`);
+          const res3 = await fetch(
+            `https://us1.locationiq.com/v1/search?key=${key}&q=${cityQuery}&format=json&limit=1`,
+            { headers: { Accept: "application/json" } }
+          );
+          const data3 = await res3.json();
+
+          if (Array.isArray(data3) && data3.length > 0) {
+            onSelect({
+              address: value,
+              city: manualCity,
+              lat: parseFloat(data3[0].lat),
+              lng: parseFloat(data3[0].lon),
+              fullAddress: `${value}, ${manualCity}, South Africa`,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Manual geocode failed:", err);
+    } finally {
+      setLoading(false);
+      setManualMode(false);
+      setOpen(false);
+    }
   }
 
   if (manualMode) {
@@ -194,10 +257,15 @@ export default function AddressInput({
           <button
             type="button"
             onClick={handleManualSubmit}
-            className="flex-1 py-2 rounded-xl text-sm font-semibold text-white transition"
-            style={{ background: "var(--gold)" }}
+            disabled={loading || !value || !manualCity}
+            className="flex-1 py-2 rounded-xl text-sm font-semibold text-white transition flex items-center justify-center gap-2"
+            style={{
+              background: "var(--gold)",
+              opacity: loading || !value || !manualCity ? 0.7 : 1,
+            }}
           >
-            Use This Address
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            {loading ? "Finding location..." : "Use This Address"}
           </button>
           <button
             type="button"
@@ -298,7 +366,6 @@ export default function AddressInput({
             );
           })}
 
-          {/* Manual entry option */}
           <button
             type="button"
             onClick={() => {
@@ -308,21 +375,14 @@ export default function AddressInput({
             className="w-full text-left px-4 py-3 transition hover:bg-white/5 flex items-center gap-3"
             style={{ borderTop: "1px solid var(--border)" }}
           >
-            <PenLine
-              size={14}
-              style={{ color: "var(--muted-foreground)" }}
-            />
-            <p
-              className="text-sm"
-              style={{ color: "var(--muted-foreground)" }}
-            >
+            <PenLine size={14} style={{ color: "var(--muted-foreground)" }} />
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
               Can't find your address? Enter it manually
             </p>
           </button>
         </div>
       )}
 
-      {/* Show manual entry if no results */}
       {!open && !loading && value.length >= 2 && suggestions.length === 0 && (
         <button
           type="button"
