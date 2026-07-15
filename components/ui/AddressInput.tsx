@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Loader2, MapPin } from "lucide-react";
+import { Loader2, MapPin, PenLine } from "lucide-react";
 
 type Suggestion = {
   display_name: string;
   lat: string;
   lon: string;
   address: {
+    house_number?: string;
     road?: string;
     suburb?: string;
     neighbourhood?: string;
@@ -34,8 +35,6 @@ type Props = {
   style?: React.CSSProperties;
 };
 
-const LOCATIONIQ_KEY = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
-
 export default function AddressInput({
   placeholder,
   value,
@@ -46,6 +45,8 @@ export default function AddressInput({
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [manualCity, setManualCity] = useState("");
   const timeoutRef = useRef<NodeJS.Timeout>();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -69,29 +70,35 @@ export default function AddressInput({
       return;
     }
 
-    if (!LOCATIONIQ_KEY) {
-      console.error("Missing NEXT_PUBLIC_LOCATIONIQ_API_KEY");
-      return;
-    }
-
     setLoading(true);
     try {
-      const encoded = encodeURIComponent(query);
-      const url = `https://api.locationiq.com/v1/autocomplete?key=${LOCATIONIQ_KEY}&q=${encoded}&countrycodes=za&format=json&limit=8&addressdetails=1`;
+      const key = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
+      const encoded = encodeURIComponent(query + " South Africa");
 
-      const res = await fetch(url);
+      const res = await fetch(
+        `https://us1.locationiq.com/v1/autocomplete?key=${key}&q=${encoded}&limit=8&dedupe=1&countrycodes=za&normalizeaddress=1&normalizecity=1&addressdetails=1&accept-language=en`,
+        { headers: { "Accept": "application/json" } }
+      );
 
-      if (!res.ok) {
-        setSuggestions([]);
-        setOpen(false);
-        return;
-      }
+      if (!res.ok) throw new Error("LocationIQ error");
 
       const data = await res.json();
       setSuggestions(Array.isArray(data) ? data : []);
       setOpen(Array.isArray(data) && data.length > 0);
     } catch {
-      setSuggestions([]);
+      // Fallback to Nominatim
+      try {
+        const encoded = encodeURIComponent(query + " South Africa");
+        const res2 = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=8&addressdetails=1&countrycodes=za`,
+          { headers: { "User-Agent": "MoveOn-Logistics-App/1.0" } }
+        );
+        const data2 = await res2.json();
+        setSuggestions(Array.isArray(data2) ? data2 : []);
+        setOpen(Array.isArray(data2) && data2.length > 0);
+      } catch {
+        setSuggestions([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -117,25 +124,28 @@ export default function AddressInput({
     );
   }
 
-  function getStreet(addr: Suggestion["address"]): string {
-    return addr.road || addr.suburb || addr.neighbourhood || "";
+  function getStreetAddress(addr: Suggestion["address"]): string {
+    const parts = [];
+    if (addr.house_number) parts.push(addr.house_number);
+    if (addr.road) parts.push(addr.road);
+    if (parts.length === 0 && addr.suburb) parts.push(addr.suburb);
+    return parts.join(" ");
   }
 
   function handleSelect(suggestion: Suggestion) {
-    const addr = suggestion.address || ({} as Suggestion["address"]);
-    const street = getStreet(addr);
+    const addr = suggestion.address;
+    const streetAddress = getStreetAddress(addr);
     const city = getCity(addr);
-    const fullAddress = suggestion.display_name;
 
     const parts = suggestion.display_name.split(",");
     const displayValue = parts.slice(0, 3).join(",").trim();
 
     onSelect({
-      address: street || parts[0]?.trim() || fullAddress,
+      address: streetAddress || parts[0]?.trim() || suggestion.display_name,
       city,
       lat: parseFloat(suggestion.lat),
       lng: parseFloat(suggestion.lon),
-      fullAddress,
+      fullAddress: suggestion.display_name,
     });
 
     onChange(displayValue);
@@ -143,11 +153,67 @@ export default function AddressInput({
     setSuggestions([]);
   }
 
-  function formatDisplayName(suggestion: Suggestion) {
-    const parts = suggestion.display_name.split(",");
-    const main = parts.slice(0, 2).join(",").trim();
-    const sub = parts.slice(2, 5).join(",").trim();
-    return { main, sub };
+  function handleManualSubmit() {
+    if (!value || !manualCity) return;
+
+    // Geocode just the city for pricing, use typed address as display
+    onSelect({
+      address: value,
+      city: manualCity,
+      lat: 0,
+      lng: 0,
+      fullAddress: `${value}, ${manualCity}, South Africa`,
+    });
+
+    setManualMode(false);
+    setOpen(false);
+  }
+
+  if (manualMode) {
+    return (
+      <div className="space-y-2">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Street address (e.g. 12 Main Street)"
+          autoComplete="off"
+          className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+          style={style}
+        />
+        <input
+          type="text"
+          value={manualCity}
+          onChange={(e) => setManualCity(e.target.value)}
+          placeholder="City / Suburb (e.g. Cape Town)"
+          autoComplete="off"
+          className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+          style={style}
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleManualSubmit}
+            className="flex-1 py-2 rounded-xl text-sm font-semibold text-white transition"
+            style={{ background: "var(--gold)" }}
+          >
+            Use This Address
+          </button>
+          <button
+            type="button"
+            onClick={() => setManualMode(false)}
+            className="px-4 py-2 rounded-xl text-sm transition"
+            style={{
+              background: "var(--input)",
+              border: "1px solid var(--border)",
+              color: "var(--muted-foreground)",
+            }}
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -183,12 +249,20 @@ export default function AddressInput({
           style={{
             background: "var(--card)",
             border: "1px solid var(--border)",
-            maxHeight: "280px",
+            maxHeight: "300px",
             overflowY: "auto",
           }}
         >
           {suggestions.map((s, i) => {
-            const { main, sub } = formatDisplayName(s);
+            const addr = s.address;
+            const street = getStreetAddress(addr);
+            const city = getCity(addr);
+            const parts = s.display_name.split(",");
+            const main = street || parts[0]?.trim();
+            const sub = city
+              ? `${city}${addr.postcode ? ` ${addr.postcode}` : ""}`
+              : parts.slice(1, 3).join(",").trim();
+
             return (
               <button
                 key={i}
@@ -223,7 +297,42 @@ export default function AddressInput({
               </button>
             );
           })}
+
+          {/* Manual entry option */}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              setManualMode(true);
+            }}
+            className="w-full text-left px-4 py-3 transition hover:bg-white/5 flex items-center gap-3"
+            style={{ borderTop: "1px solid var(--border)" }}
+          >
+            <PenLine
+              size={14}
+              style={{ color: "var(--muted-foreground)" }}
+            />
+            <p
+              className="text-sm"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Can't find your address? Enter it manually
+            </p>
+          </button>
         </div>
+      )}
+
+      {/* Show manual entry if no results */}
+      {!open && !loading && value.length >= 2 && suggestions.length === 0 && (
+        <button
+          type="button"
+          onClick={() => setManualMode(true)}
+          className="mt-1 flex items-center gap-2 text-xs transition hover:underline"
+          style={{ color: "var(--gold)" }}
+        >
+          <PenLine size={12} />
+          Can't find your address? Enter it manually
+        </button>
       )}
     </div>
   );
