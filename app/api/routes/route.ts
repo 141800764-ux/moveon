@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generateTrackingNumber } from "@/lib/utils/tracking";
-import { sequenceStopsNearestNeighbor } from "@/lib/utils/routeOptimizer";
+import { geocodeAddress } from "@/lib/utils/geocode";
 
 export async function GET() {
   try {
@@ -29,14 +28,21 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { hubId, driverId, vehicleId, date, plannedStartAt, plannedEndAt, orderIds } = body;
+    const {
+      hubId,
+      driverId,
+      vehicleId,
+      date,
+      plannedStartAt,
+      plannedEndAt,
+      stops,
+    } = body;
 
     if (!hubId || !date) {
-      return NextResponse.json({ message: "Hub and date are required" }, { status: 400 });
-    }
-
-    if (!orderIds || orderIds.length === 0) {
-      return NextResponse.json({ message: "Select at least one order" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Hub and date are required" },
+        { status: 400 }
+      );
     }
 
     const hub = await prisma.hub.findUnique({ where: { id: hubId } });
@@ -44,58 +50,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Hub not found" }, { status: 404 });
     }
 
-    const orders = await prisma.order.findMany({
-      where: { id: { in: orderIds } },
-    });
+    // Geocode all stop addresses
+    const geocodedStops = await Promise.all(
+      stops.map(async (stop: any) => {
+        let lat = 0;
+        let lng = 0;
 
-    if (orders.length === 0) {
-      return NextResponse.json({ message: "No valid orders found" }, { status: 404 });
-    }
+        // If stop came from a shipment it may already have coords
+        if (stop.lat && stop.lng) {
+          lat = stop.lat;
+          lng = stop.lng;
+        } else if (stop.address && stop.city) {
+          const coords = await geocodeAddress(stop.address, stop.city);
+          if (coords) {
+            lat = coords.lat;
+            lng = coords.lng;
+          }
+        }
 
-    // Create a Shipment for each order (if it doesn't already have one)
-    const shipmentByOrderId: Record<string, string> = {};
-    for (const order of orders) {
-      const shipment = await prisma.shipment.create({
-        data: {
-          carrierId: order.carrierId,
-          orderId: order.id,
-          trackingNumber: generateTrackingNumber(),
-          status: "CREATED",
-          weightKg: order.weightKg,
-        },
-      });
-      shipmentByOrderId[order.id] = shipment.id;
-    }
-
-    // Build raw stop points (unsequenced) from each order's destination
-    const rawStops = orders
-      .filter((o) => o.destinationLat != null && o.destinationLng != null)
-      .map((order) => {
-        const destination = order.destination as any;
         return {
-          id: order.id,
-          lat: order.destinationLat as number,
-          lng: order.destinationLng as number,
-          shipmentId: shipmentByOrderId[order.id],
-          address: destination,
-          contactName: order.recipientName,
-          contactPhone: order.recipientPhone,
+          sequence: stop.sequence,
+          type: stop.type,
+          address: { address: stop.address, city: stop.city },
+          latitude: lat,
+          longitude: lng,
+          contactName: stop.contactName || null,
+          contactPhone: stop.contactPhone || null,
+          shipmentId: stop.shipmentId || null,
+          status: "PENDING",
         };
-      });
-
-    // Sequence stops via nearest-neighbor starting from the hub
-    const sequenced = sequenceStopsNearestNeighbor(hub.latitude, hub.longitude, rawStops);
-
-    // Calculate total route distance for reference
-    let totalDistanceKm = 0;
-    let prevLat = hub.latitude;
-    let prevLng = hub.longitude;
-    const { calculateDistanceKm } = await import("@/lib/utils/distance");
-    for (const stop of sequenced) {
-      totalDistanceKm += calculateDistanceKm(prevLat, prevLng, stop.lat, stop.lng);
-      prevLat = stop.lat;
-      prevLng = stop.lng;
-    }
+      })
+    );
 
     const route = await prisma.route.create({
       data: {
@@ -105,30 +90,17 @@ export async function POST(request: NextRequest) {
         vehicleId: vehicleId || null,
         date: new Date(date),
         status: "PLANNED",
-        plannedStartAt: plannedStartAt ? new Date(`${date}T${plannedStartAt}`) : null,
-        plannedEndAt: plannedEndAt ? new Date(`${date}T${plannedEndAt}`) : null,
-        totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
+        plannedStartAt: plannedStartAt
+          ? new Date(`${date}T${plannedStartAt}`)
+          : null,
+        plannedEndAt: plannedEndAt
+          ? new Date(`${date}T${plannedEndAt}`)
+          : null,
         stops: {
-          create: sequenced.map((stop, index) => ({
-            sequence: index + 1,
-            type: "DELIVERY",
-            shipmentId: stop.shipmentId,
-            address: stop.address,
-            latitude: stop.lat,
-            longitude: stop.lng,
-            contactName: stop.contactName,
-            contactPhone: stop.contactPhone,
-            status: "PENDING",
-          })),
+          create: geocodedStops,
         },
       },
       include: { stops: true },
-    });
-
-    // Mark orders as CONFIRMED now that they're on a route
-    await prisma.order.updateMany({
-      where: { id: { in: orderIds } },
-      data: { status: "CONFIRMED" },
     });
 
     return NextResponse.json({ success: true, route }, { status: 201 });
