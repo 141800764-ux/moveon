@@ -64,44 +64,45 @@ export default function AddressInput({
   }, []);
 
   async function fetchSuggestions(query: string) {
-    if (query.length < 2) {
-      setSuggestions([]);
-      setOpen(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const key = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
-      const encoded = encodeURIComponent(query + " South Africa");
-
-      const res = await fetch(
-        `https://us1.locationiq.com/v1/autocomplete?key=${key}&q=${encoded}&limit=8&dedupe=1&countrycodes=za&normalizeaddress=1&normalizecity=1&addressdetails=1&accept-language=en`,
-        { headers: { Accept: "application/json" } }
-      );
-
-      if (!res.ok) throw new Error("LocationIQ error");
-
-      const data = await res.json();
-      setSuggestions(Array.isArray(data) ? data : []);
-      setOpen(Array.isArray(data) && data.length > 0);
-    } catch {
-      try {
-        const encoded = encodeURIComponent(query + " South Africa");
-        const res2 = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=8&addressdetails=1&countrycodes=za`,
-          { headers: { "User-Agent": "MoveOn-Logistics-App/1.0" } }
-        );
-        const data2 = await res2.json();
-        setSuggestions(Array.isArray(data2) ? data2 : []);
-        setOpen(Array.isArray(data2) && data2.length > 0);
-      } catch {
-        setSuggestions([]);
-      }
-    } finally {
-      setLoading(false);
-    }
+  if (query.length < 3) {
+    setSuggestions([]);
+    setOpen(false);
+    return;
   }
+
+  setLoading(true);
+  try {
+    const key = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
+    const encoded = encodeURIComponent(query + ", South Africa");
+
+    // Use search endpoint instead of autocomplete — more precise results
+    const res = await fetch(
+      `https://us1.locationiq.com/v1/search?key=${key}&q=${encoded}&format=json&limit=8&addressdetails=1&countrycodes=za&accept-language=en`,
+      { headers: { Accept: "application/json" } }
+    );
+
+    if (!res.ok) throw new Error("LocationIQ error");
+
+    const data = await res.json();
+    setSuggestions(Array.isArray(data) ? data : []);
+    setOpen(Array.isArray(data) && data.length > 0);
+  } catch {
+    try {
+      const encoded = encodeURIComponent(query + ", South Africa");
+      const res2 = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=8&addressdetails=1&countrycodes=za`,
+        { headers: { "User-Agent": "MoveOn-Logistics-App/1.0" } }
+      );
+      const data2 = await res2.json();
+      setSuggestions(Array.isArray(data2) ? data2 : []);
+      setOpen(Array.isArray(data2) && data2.length > 0);
+    } catch {
+      setSuggestions([]);
+    }
+  } finally {
+    setLoading(false);
+  }
+}
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
