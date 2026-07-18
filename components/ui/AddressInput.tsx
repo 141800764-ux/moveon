@@ -3,21 +3,19 @@
 import { useState, useRef, useEffect } from "react";
 import { Loader2, MapPin, PenLine } from "lucide-react";
 
-type Suggestion = {
-  display_name: string;
-  lat: string;
-  lon: string;
-  address: {
-    house_number?: string;
-    road?: string;
+type GeoapifyFeature = {
+  properties: {
+    formatted: string;
+    housenumber?: string;
+    street?: string;
     suburb?: string;
-    neighbourhood?: string;
+    district?: string;
     city?: string;
-    town?: string;
-    village?: string;
-    municipality?: string;
-    postcode?: string;
+    county?: string;
     state?: string;
+    postcode?: string;
+    lat: number;
+    lon: number;
   };
 };
 
@@ -35,6 +33,8 @@ type Props = {
   style?: React.CSSProperties;
 };
 
+const GEOAPIFY_KEY = process.env.NEXT_PUBLIC_GEOAPIFY_KEY;
+
 export default function AddressInput({
   placeholder,
   value,
@@ -42,7 +42,7 @@ export default function AddressInput({
   onSelect,
   style,
 }: Props) {
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<GeoapifyFeature[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [manualMode, setManualMode] = useState(false);
@@ -64,45 +64,40 @@ export default function AddressInput({
   }, []);
 
   async function fetchSuggestions(query: string) {
-  if (query.length < 3) {
-    setSuggestions([]);
-    setOpen(false);
-    return;
-  }
+    if (query.length < 3) {
+      setSuggestions([]);
+      setOpen(false);
+      return;
+    }
 
-  setLoading(true);
-  try {
-    const key = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
-    const encoded = encodeURIComponent(query + ", South Africa");
+    if (!GEOAPIFY_KEY) {
+      console.error("Missing NEXT_PUBLIC_GEOAPIFY_KEY");
+      return;
+    }
 
-    // Use search endpoint instead of autocomplete — more precise results
-    const res = await fetch(
-      `https://us1.locationiq.com/v1/search?key=${key}&q=${encoded}&format=json&limit=8&addressdetails=1&countrycodes=za&accept-language=en`,
-      { headers: { Accept: "application/json" } }
-    );
-
-    if (!res.ok) throw new Error("LocationIQ error");
-
-    const data = await res.json();
-    setSuggestions(Array.isArray(data) ? data : []);
-    setOpen(Array.isArray(data) && data.length > 0);
-  } catch {
+    setLoading(true);
     try {
-      const encoded = encodeURIComponent(query + ", South Africa");
-      const res2 = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=8&addressdetails=1&countrycodes=za`,
-        { headers: { "User-Agent": "MoveOn-Logistics-App/1.0" } }
-      );
-      const data2 = await res2.json();
-      setSuggestions(Array.isArray(data2) ? data2 : []);
-      setOpen(Array.isArray(data2) && data2.length > 0);
+      const encoded = encodeURIComponent(query);
+      const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encoded}&filter=countrycode:za&format=geojson&limit=8&apiKey=${GEOAPIFY_KEY}`;
+
+      const res = await fetch(url);
+
+      if (!res.ok) {
+        setSuggestions([]);
+        setOpen(false);
+        return;
+      }
+
+      const data = await res.json();
+      const features: GeoapifyFeature[] = data?.features || [];
+      setSuggestions(features);
+      setOpen(features.length > 0);
     } catch {
       setSuggestions([]);
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
   }
-}
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value;
@@ -111,43 +106,33 @@ export default function AddressInput({
     timeoutRef.current = setTimeout(() => fetchSuggestions(val), 350);
   }
 
-  function getCity(addr: Suggestion["address"]): string {
-    return (
-      addr.city ||
-      addr.town ||
-      addr.municipality ||
-      addr.village ||
-      addr.suburb ||
-      addr.neighbourhood ||
-      addr.state ||
-      ""
-    );
+  function getCity(props: GeoapifyFeature["properties"]): string {
+    return props.city || props.district || props.county || props.state || "";
   }
 
-  function getStreetAddress(addr: Suggestion["address"]): string {
+  function getStreetAddress(props: GeoapifyFeature["properties"]): string {
     const parts = [];
-    if (addr.house_number) parts.push(addr.house_number);
-    if (addr.road) parts.push(addr.road);
-    if (parts.length === 0 && addr.suburb) parts.push(addr.suburb);
+    if (props.housenumber) parts.push(props.housenumber);
+    if (props.street) parts.push(props.street);
+    if (parts.length === 0 && props.suburb) parts.push(props.suburb);
     return parts.join(" ");
   }
 
-  function handleSelect(suggestion: Suggestion) {
-    const addr = suggestion.address;
-    const streetAddress = getStreetAddress(addr);
-    const city = getCity(addr);
-    const parts = suggestion.display_name.split(",");
-    const displayValue = parts.slice(0, 3).join(",").trim();
+  function handleSelect(feature: GeoapifyFeature) {
+    const props = feature.properties;
+    const streetAddress = getStreetAddress(props);
+    const city = getCity(props);
 
     onSelect({
-      address: streetAddress || parts[0]?.trim() || suggestion.display_name,
+      address: streetAddress || props.formatted.split(",")[0]?.trim() || props.formatted,
       city,
-      lat: parseFloat(suggestion.lat),
-      lng: parseFloat(suggestion.lon),
-      fullAddress: suggestion.display_name,
+      lat: props.lat,
+      lng: props.lon,
+      fullAddress: props.formatted,
     });
 
-    onChange(displayValue);
+    const parts = props.formatted.split(",");
+    onChange(parts.slice(0, 3).join(",").trim());
     setOpen(false);
     setSuggestions([]);
   }
@@ -157,71 +142,37 @@ export default function AddressInput({
 
     setLoading(true);
     try {
-      const key = process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
       const query = encodeURIComponent(`${value}, ${manualCity}, South Africa`);
-
       const res = await fetch(
-        `https://us1.locationiq.com/v1/search?key=${key}&q=${query}&format=json&limit=1&addressdetails=1`,
-        { headers: { Accept: "application/json" } }
+        `https://api.geoapify.com/v1/geocode/search?text=${query}&filter=countrycode:za&format=json&limit=1&apiKey=${GEOAPIFY_KEY}`
       );
-
       const data = await res.json();
 
-      if (Array.isArray(data) && data.length > 0) {
-        const result = data[0];
-        const addr = result.address;
-        const city =
-          addr.city ||
-          addr.town ||
-          addr.municipality ||
-          addr.village ||
-          addr.suburb ||
-          manualCity;
-
+      if (data?.results && data.results.length > 0) {
+        const result = data.results[0];
         onSelect({
           address: value,
-          city,
-          lat: parseFloat(result.lat),
-          lng: parseFloat(result.lon),
+          city: result.city || manualCity,
+          lat: result.lat,
+          lng: result.lon,
           fullAddress: `${value}, ${manualCity}, South Africa`,
         });
       } else {
-        // Fallback to Nominatim
-        const encoded = encodeURIComponent(
-          `${value}, ${manualCity}, South Africa`
-        );
+        // Last resort — geocode just the city center so pricing still works
+        const cityQuery = encodeURIComponent(`${manualCity}, South Africa`);
         const res2 = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`,
-          { headers: { "User-Agent": "MoveOn-Logistics-App/1.0" } }
+          `https://api.geoapify.com/v1/geocode/search?text=${cityQuery}&filter=countrycode:za&format=json&limit=1&apiKey=${GEOAPIFY_KEY}`
         );
         const data2 = await res2.json();
 
-        if (Array.isArray(data2) && data2.length > 0) {
+        if (data2?.results && data2.results.length > 0) {
           onSelect({
             address: value,
             city: manualCity,
-            lat: parseFloat(data2[0].lat),
-            lng: parseFloat(data2[0].lon),
+            lat: data2.results[0].lat,
+            lng: data2.results[0].lon,
             fullAddress: `${value}, ${manualCity}, South Africa`,
           });
-        } else {
-          // Last resort — geocode just the city center
-          const cityQuery = encodeURIComponent(`${manualCity}, South Africa`);
-          const res3 = await fetch(
-            `https://us1.locationiq.com/v1/search?key=${key}&q=${cityQuery}&format=json&limit=1`,
-            { headers: { Accept: "application/json" } }
-          );
-          const data3 = await res3.json();
-
-          if (Array.isArray(data3) && data3.length > 0) {
-            onSelect({
-              address: value,
-              city: manualCity,
-              lat: parseFloat(data3[0].lat),
-              lng: parseFloat(data3[0].lon),
-              fullAddress: `${value}, ${manualCity}, South Africa`,
-            });
-          }
         }
       }
     } catch (err) {
@@ -323,14 +274,13 @@ export default function AddressInput({
           }}
         >
           {suggestions.map((s, i) => {
-            const addr = s.address;
-            const street = getStreetAddress(addr);
-            const city = getCity(addr);
-            const parts = s.display_name.split(",");
-            const main = street || parts[0]?.trim();
+            const props = s.properties;
+            const street = getStreetAddress(props);
+            const city = getCity(props);
+            const main = street || props.formatted.split(",")[0]?.trim();
             const sub = city
-              ? `${city}${addr.postcode ? ` ${addr.postcode}` : ""}`
-              : parts.slice(1, 3).join(",").trim();
+              ? `${city}${props.postcode ? ` ${props.postcode}` : ""}`
+              : props.formatted.split(",").slice(1, 3).join(",").trim();
 
             return (
               <button

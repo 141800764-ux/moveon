@@ -1,11 +1,11 @@
-const LOCATIONIQ_KEY = process.env.LOCATIONIQ_API_KEY || process.env.NEXT_PUBLIC_LOCATIONIQ_API_KEY;
+const GEOAPIFY_KEY = process.env.NEXT_PUBLIC_GEOAPIFY_KEY;
 
 export async function geocodeAddress(
   address: string,
   city: string
 ): Promise<{ lat: number; lng: number } | null> {
-  if (!LOCATIONIQ_KEY) {
-    console.error("Missing LOCATIONIQ_API_KEY");
+  if (!GEOAPIFY_KEY) {
+    console.error("Missing NEXT_PUBLIC_GEOAPIFY_KEY");
     return null;
   }
 
@@ -19,17 +19,17 @@ export async function geocodeAddress(
     for (const query of queries) {
       const encoded = encodeURIComponent(query);
       const res = await fetch(
-        `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_KEY}&q=${encoded}&countrycodes=za&format=json&limit=1`
+        `https://api.geoapify.com/v1/geocode/search?text=${encoded}&filter=countrycode:za&format=json&limit=1&apiKey=${GEOAPIFY_KEY}`
       );
 
       if (!res.ok) continue;
 
       const data = await res.json();
 
-      if (Array.isArray(data) && data.length > 0) {
+      if (data?.results && data.results.length > 0) {
         return {
-          lat: parseFloat(data[0].lat),
-          lng: parseFloat(data[0].lon),
+          lat: data.results[0].lat,
+          lng: data.results[0].lon,
         };
       }
     }
