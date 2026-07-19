@@ -15,7 +15,7 @@
     "@prisma/client": "^7.8.0",
     "@types/leaflet": "^1.9.21",
     "@types/mapbox-gl": "^3.4.1",
-    "@vercel/blob": "^2.5.0",
+    "@vercel/blob": "^2.6.1",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

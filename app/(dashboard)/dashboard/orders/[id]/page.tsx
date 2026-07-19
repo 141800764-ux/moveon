@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import AIDispatcher from "@/components/admin/AIDispatcher";
 import { ArrowLeft, Package, MapPin, User, Phone, Mail, Weight } from "lucide-react";
 import OrderStatusUpdater from "@/components/orders/OrderStatusUpdater";
 
@@ -152,6 +153,12 @@ export default async function OrderDetailPage({
             </div>
           )}
         </div>
+{order.status === "FAILED" && order.shipments[0] && (
+  <AIDispatcher
+    stopId={order.shipments[0].stops?.[0]?.id ?? ""}
+    failureReason={order.shipments[0].failureReason ?? ""}
+  />
+)}
 
         {/* Right column */}
         <div className="space-y-6">

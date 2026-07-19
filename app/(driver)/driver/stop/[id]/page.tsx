@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle, XCircle, Navigation, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle,
+  XCircle,
+  Navigation,
+  Loader2,
+  Camera,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -17,6 +25,9 @@ export default function StopDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [notes, setNotes] = useState("");
   const [failureReason, setFailureReason] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch(`/api/stops/${params.id}`)
@@ -27,9 +38,40 @@ export default function StopDetailPage() {
       });
   }, [params.id]);
 
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  async function uploadPhoto(stopId: string): Promise<string | null> {
+    if (!photo) return null;
+    try {
+      const formData = new FormData();
+      formData.append("photo", photo);
+      const res = await fetch(`/api/stops/${stopId}/pod`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      return data.url ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async function updateStop(status: "COMPLETED" | "FAILED") {
+    if (status === "COMPLETED" && !photo) {
+      toast.error("Please take a proof of delivery photo");
+      return;
+    }
+
     setUpdating(true);
     try {
+      // Upload photo first
+      const photoUrl = await uploadPhoto(params.id as string);
+
       const res = await fetch(`/api/stops/${params.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -38,6 +80,7 @@ export default function StopDetailPage() {
           notes,
           failureReason: status === "FAILED" ? failureReason : null,
           actualArrivalAt: new Date().toISOString(),
+          podPhotoUrl: photoUrl,
         }),
       });
 
@@ -47,7 +90,9 @@ export default function StopDetailPage() {
       }
 
       toast.success(
-        status === "COMPLETED" ? "Stop marked as delivered!" : "Stop marked as failed"
+        status === "COMPLETED"
+          ? "Delivery confirmed!"
+          : "Stop marked as failed"
       );
       router.push("/driver");
       router.refresh();
@@ -61,7 +106,9 @@ export default function StopDetailPage() {
   function openNavigation() {
     if (!stop) return;
     const address = stop.address as any;
-    const query = encodeURIComponent(`${address?.address}, ${address?.city}`);
+    const query = encodeURIComponent(
+      `${address?.address}, ${address?.city}`
+    );
     window.open(
       `https://www.google.com/maps/dir/?api=1&destination=${query}&travelmode=driving`,
       "_blank"
@@ -77,7 +124,11 @@ export default function StopDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={32} className="animate-spin" style={{ color: "var(--gold)" }} />
+        <Loader2
+          size={32}
+          className="animate-spin"
+          style={{ color: "var(--gold)" }}
+        />
       </div>
     );
   }
@@ -119,14 +170,20 @@ export default function StopDetailPage() {
       {/* Address */}
       <div
         className="rounded-2xl p-5"
-        style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+        style={{
+          background: "var(--card)",
+          border: "1px solid var(--border)",
+        }}
       >
         <p className="text-white font-semibold text-lg">{address?.address}</p>
         <p className="mt-1" style={{ color: "var(--muted-foreground)" }}>
           {address?.city}
         </p>
         {stop.contactName && (
-          <p className="mt-2 text-sm" style={{ color: "var(--muted-foreground)" }}>
+          <p
+            className="mt-2 text-sm"
+            style={{ color: "var(--muted-foreground)" }}
+          >
             {stop.contactName}{" "}
             {stop.contactPhone && `· ${stop.contactPhone}`}
           </p>
@@ -137,10 +194,16 @@ export default function StopDetailPage() {
             className="mt-3 pt-3 flex items-center justify-between"
             style={{ borderTop: "1px solid var(--border)" }}
           >
-            <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+            <span
+              className="text-sm"
+              style={{ color: "var(--muted-foreground)" }}
+            >
               You'll earn
             </span>
-            <span className="text-lg font-bold" style={{ color: "var(--gold)" }}>
+            <span
+              className="text-lg font-bold"
+              style={{ color: "var(--gold)" }}
+            >
               R{Number(stop.shipment.order.driverPayout).toFixed(2)}
             </span>
           </div>
@@ -160,9 +223,68 @@ export default function StopDetailPage() {
       {stop.status === "PENDING" && (
         <div
           className="rounded-2xl p-5 space-y-4"
-          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+          style={{
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+          }}
         >
           <h2 className="font-semibold text-white">Update Stop</h2>
+
+          {/* Photo capture */}
+          <div className="space-y-1.5">
+            <Label className="text-white">
+              Proof of Delivery Photo *
+            </Label>
+            {photoPreview ? (
+              <div className="relative">
+                <img
+                  src={photoPreview}
+                  alt="POD"
+                  className="w-full h-48 object-cover rounded-xl"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoto(null);
+                    setPhotoPreview(null);
+                  }}
+                  className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: "rgba(0,0,0,0.6)" }}
+                >
+                  <X size={16} className="text-white" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full h-32 rounded-xl flex flex-col items-center justify-center gap-2 transition hover:bg-white/5"
+                style={{
+                  background: "var(--background)",
+                  border: "2px dashed var(--border)",
+                }}
+              >
+                <Camera
+                  size={28}
+                  style={{ color: "var(--muted-foreground)" }}
+                />
+                <p
+                  className="text-sm"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Take or upload a photo
+                </p>
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoChange}
+              className="hidden"
+            />
+          </div>
 
           <div className="space-y-1.5">
             <Label className="text-white">Notes</Label>
@@ -171,7 +293,7 @@ export default function StopDetailPage() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               style={inputStyle}
-              rows={3}
+              rows={2}
             />
           </div>
 
@@ -221,8 +343,11 @@ export default function StopDetailPage() {
 
       {stop.status !== "PENDING" && (
         <div
-          className="rounded-2xl p-5 text-center"
-          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+          className="rounded-2xl p-5 text-center space-y-3"
+          style={{
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+          }}
         >
           <p
             className="font-semibold"
@@ -232,9 +357,16 @@ export default function StopDetailPage() {
           >
             This stop is {stop.status.toLowerCase()}
           </p>
+          {stop.podPhotoUrl && (
+            <img
+              src={stop.podPhotoUrl}
+              alt="Proof of delivery"
+              className="w-full h-48 object-cover rounded-xl mx-auto"
+            />
+          )}
           {stop.notes && (
             <p
-              className="text-sm mt-2"
+              className="text-sm"
               style={{ color: "var(--muted-foreground)" }}
             >
               {stop.notes}

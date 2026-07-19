@@ -12,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 import RouteStatusUpdater from "@/components/routes/RouteStatusUpdater";
+import RouteOptimizer from "@/components/routes/RouteOptimizer";
 
 const STOP_STATUS_ICONS: Record<string, any> = {
   PENDING: Circle,
@@ -75,6 +76,7 @@ export default async function RouteDetailPage({
           </div>
         </div>
         <RouteStatusUpdater routeId={route.id} currentStatus={route.status} />
+        <RouteOptimizer routeId={route.id} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
