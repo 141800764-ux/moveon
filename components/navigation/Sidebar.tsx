@@ -38,6 +38,7 @@ const navItems = [
   { href: "/dashboard/payouts", label: "Payouts", icon: DollarSign },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
   { href: "/dashboard/map", label: "Live Map", icon: Map },
+  { href: "/dashboard/chat", label: "Customer Chat", icon: MessageSquare },
 ];
 
 const adminNavItems = [
