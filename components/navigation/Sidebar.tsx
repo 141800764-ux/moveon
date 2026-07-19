@@ -21,6 +21,7 @@ import {
   X,
   DollarSign,
   Map,
+  MessageSquare,
 } from "lucide-react";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "CARRIER_ADMIN", "DISPATCHER"];

@@ -69,6 +69,8 @@ model User {
   customerProfile    Customer?
   reviewedDocuments  DriverDocument[] @relation("DocumentReviewer")
   reviewedDrivers    Driver[]         @relation("DriverReviewer")
+  sentMessages     ChatMessage[] @relation("SentMessages")
+  receivedMessages ChatMessage[] @relation("ReceivedMessages") 
 }
 
 enum UserRole {
@@ -79,6 +81,7 @@ enum UserRole {
   DRIVER
   CUSTOMER
 }
+
 
 // ============================================================
 // CARRIER
@@ -160,6 +163,7 @@ model Driver {
   documents       DriverDocument[]
   earnings        DriverEarning[]
   bankingDetails  DriverBankingDetails?
+  bids OrderBid[]
 }
 
 enum DriverStatus {
@@ -342,6 +346,8 @@ model Order {
   customer  Customer        @relation(fields: [customerId], references: [id])
   shipments Shipment[]
   earnings  DriverEarning[]
+  bids    OrderBid[]
+  payment Payment?
 }
 
 enum OrderStatus {
@@ -530,4 +536,87 @@ model DriverBankingDetails {
   updatedAt     DateTime @updatedAt
 
   driver Driver @relation(fields: [driverId], references: [id])
+}
+// ============================================================
+// DRIVER APPLICATIONS
+// ============================================================
+
+model DriverApplication {
+  id              String   @id @default(cuid())
+  token           String   @unique @default(cuid())
+  email           String
+  status          String   @default("PENDING")
+  fullName        String?
+  phone           String?
+  licenseNumber   String?
+  licenseExpiresAt DateTime?
+  licenseClasses  String[]
+  profilePhotoUrl String?
+  idPhotoUrl      String?
+  vehicleMake     String?
+  vehicleModel    String?
+  vehicleYear     Int?
+  vehicleReg      String?
+  vehicleType     String?
+  vehiclePhotoUrl String?
+  bankName        String?
+  accountHolder   String?
+  accountNumber   String?
+  branchCode      String?
+  accountType     String   @default("CHEQUE")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ============================================================
+// CHAT MESSAGES
+// ============================================================
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  message    String   @db.Text
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  fromUser User @relation("SentMessages", fields: [fromUserId], references: [id])
+  toUser   User @relation("ReceivedMessages", fields: [toUserId], references: [id])
+
+  @@index([fromUserId, toUserId])
+  @@index([toUserId, isRead])
+}
+
+// ============================================================
+// ORDER BIDS (drivers accepting orders)
+// ============================================================
+
+model OrderBid {
+  id        String   @id @default(cuid())
+  orderId   String
+  driverId  String
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+
+  order  Order  @relation(fields: [orderId], references: [id])
+  driver Driver @relation(fields: [driverId], references: [id])
+
+  @@unique([orderId, driverId])
+}
+
+// ============================================================
+// PAYMENTS
+// ============================================================
+
+model Payment {
+  id            String   @id @default(cuid())
+  orderId       String   @unique
+  amount        Decimal  @db.Decimal(12, 2)
+  method        String   @default("CASH")
+  status        String   @default("PENDING")
+  payfastId     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id])
 }
