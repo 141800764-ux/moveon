@@ -53,7 +53,7 @@ export default async function RouteDetailPage({
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4">
           <Link href="/dashboard/routes">
             <button
@@ -75,14 +75,15 @@ export default async function RouteDetailPage({
             </p>
           </div>
         </div>
-        <RouteStatusUpdater routeId={route.id} currentStatus={route.status} />
-        <RouteOptimizer routeId={route.id} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <RouteOptimizer routeId={route.id} />
+          <RouteStatusUpdater routeId={route.id} currentStatus={route.status} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left */}
         <div className="space-y-6">
-          {/* Info */}
           <div
             className="rounded-2xl p-6 space-y-4"
             style={{ background: "var(--card)", border: "1px solid var(--border)" }}
@@ -114,22 +115,29 @@ export default async function RouteDetailPage({
                 <div className="flex items-center gap-3">
                   <Calendar size={16} style={{ color: "var(--gold)" }} />
                   <span style={{ color: "var(--muted-foreground)" }}>
-                    {new Date(route.plannedStartAt).toLocaleTimeString(
-                      "en-ZA",
-                      { hour: "2-digit", minute: "2-digit" }
-                    )}
+                    {new Date(route.plannedStartAt).toLocaleTimeString("en-ZA", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                     {route.plannedEndAt &&
-                      ` — ${new Date(route.plannedEndAt).toLocaleTimeString(
-                        "en-ZA",
-                        { hour: "2-digit", minute: "2-digit" }
-                      )}`}
+                      ` — ${new Date(route.plannedEndAt).toLocaleTimeString("en-ZA", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}`}
+                  </span>
+                </div>
+              )}
+              {route.totalDistanceKm && (
+                <div className="flex items-center gap-3">
+                  <MapPin size={16} style={{ color: "var(--gold)" }} />
+                  <span style={{ color: "var(--muted-foreground)" }}>
+                    {route.totalDistanceKm} km total
                   </span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Progress */}
           <div
             className="rounded-2xl p-6"
             style={{ background: "var(--card)", border: "1px solid var(--border)" }}
@@ -139,10 +147,7 @@ export default async function RouteDetailPage({
               <p className="text-4xl font-bold" style={{ color: "var(--gold)" }}>
                 {completedStops}/{route.stops.length}
               </p>
-              <p
-                className="text-sm mt-1"
-                style={{ color: "var(--muted-foreground)" }}
-              >
+              <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>
                 stops completed
               </p>
             </div>
@@ -163,7 +168,7 @@ export default async function RouteDetailPage({
           </div>
         </div>
 
-        {/* Right — Stops */}
+        {/* Right */}
         <div className="lg:col-span-2">
           <div
             className="rounded-2xl p-6"
@@ -173,9 +178,7 @@ export default async function RouteDetailPage({
               Stops ({route.stops.length})
             </h3>
             {route.stops.length === 0 ? (
-              <p style={{ color: "var(--muted-foreground)" }}>
-                No stops added yet.
-              </p>
+              <p style={{ color: "var(--muted-foreground)" }}>No stops added yet.</p>
             ) : (
               <div className="space-y-3">
                 {route.stops.map((stop, index) => {
@@ -199,36 +202,39 @@ export default async function RouteDetailPage({
                         )}
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                           <span
                             className="text-xs font-semibold uppercase tracking-wider"
                             style={{ color: "var(--gold)" }}
                           >
                             Stop {stop.sequence} · {stop.type}
                           </span>
-                          <span
-                            className="text-xs font-semibold"
-                            style={{ color }}
-                          >
+                          <span className="text-xs font-semibold" style={{ color }}>
                             {stop.status}
                           </span>
                         </div>
                         <p className="text-white font-medium mt-1">
                           {address?.address}
                         </p>
-                        <p
-                          className="text-sm"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
+                        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                           {address?.city}
                         </p>
                         {stop.contactName && (
-                          <p
-                            className="text-sm mt-1"
-                            style={{ color: "var(--muted-foreground)" }}
-                          >
+                          <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>
                             {stop.contactName}{" "}
                             {stop.contactPhone && `· ${stop.contactPhone}`}
+                          </p>
+                        )}
+                        {stop.podPhotoUrl && (
+                          <img
+                            src={stop.podPhotoUrl}
+                            alt="Proof of delivery"
+                            className="mt-2 w-full max-w-xs h-32 object-cover rounded-xl"
+                          />
+                        )}
+                        {stop.notes && (
+                          <p className="text-xs mt-1" style={{ color: "var(--muted-foreground)" }}>
+                            Note: {stop.notes}
                           </p>
                         )}
                       </div>

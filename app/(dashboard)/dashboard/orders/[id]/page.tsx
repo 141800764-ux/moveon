@@ -2,9 +2,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import AIDispatcher from "@/components/admin/AIDispatcher";
-import { ArrowLeft, Package, MapPin, User, Phone, Mail, Weight } from "lucide-react";
+import { ArrowLeft, Package, MapPin, User, Phone, Mail } from "lucide-react";
 import OrderStatusUpdater from "@/components/orders/OrderStatusUpdater";
+import AIDispatcher from "@/components/admin/AIDispatcher";
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   PENDING: { bg: "rgba(234,179,8,0.1)", color: "#eab308" },
@@ -30,7 +30,10 @@ export default async function OrderDetailPage({
     include: {
       customer: true,
       shipments: {
-        include: { events: true },
+        include: {
+          events: { orderBy: { createdAt: "desc" } },
+          stops: { orderBy: { sequence: "asc" } },
+        },
       },
     },
   });
@@ -40,11 +43,14 @@ export default async function OrderDetailPage({
   const colors = STATUS_COLORS[order.status] ?? STATUS_COLORS.PENDING;
   const origin = order.origin as any;
   const destination = order.destination as any;
+  const failedStop = order.shipments[0]?.stops?.find(
+    (s) => s.status === "FAILED"
+  );
 
   return (
     <div className="max-w-4xl space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4">
           <Link href="/dashboard/orders">
             <button
@@ -55,10 +61,8 @@ export default async function OrderDetailPage({
             </button>
           </Link>
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-white">
-                Order Details
-              </h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-3xl font-bold text-white">Order Details</h1>
               <span
                 className="text-xs font-semibold px-2.5 py-1 rounded-full"
                 style={{ background: colors.bg, color: colors.color }}
@@ -75,7 +79,7 @@ export default async function OrderDetailPage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column */}
+        {/* Left */}
         <div className="lg:col-span-2 space-y-6">
           {/* Route */}
           <div
@@ -85,39 +89,34 @@ export default async function OrderDetailPage({
             <h2 className="text-lg font-semibold text-white mb-4">Route</h2>
             <div className="flex items-start gap-4">
               <div className="flex flex-col items-center">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ background: "var(--gold)" }}
-                />
-                <div
-                  className="w-0.5 h-12"
-                  style={{ background: "var(--border)" }}
-                />
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ background: "var(--red)" }}
-                />
+                <div className="w-3 h-3 rounded-full" style={{ background: "var(--gold)" }} />
+                <div className="w-0.5 h-12" style={{ background: "var(--border)" }} />
+                <div className="w-3 h-3 rounded-full" style={{ background: "var(--red)" }} />
               </div>
               <div className="flex-1 space-y-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider mb-1"
-                    style={{ color: "var(--muted-foreground)" }}>
-                    Pickup
-                  </p>
+                    style={{ color: "var(--muted-foreground)" }}>Pickup</p>
                   <p className="text-white font-medium">{origin?.address}</p>
                   <p style={{ color: "var(--muted-foreground)" }}>{origin?.city}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider mb-1"
-                    style={{ color: "var(--muted-foreground)" }}>
-                    Delivery
-                  </p>
+                    style={{ color: "var(--muted-foreground)" }}>Delivery</p>
                   <p className="text-white font-medium">{destination?.address}</p>
                   <p style={{ color: "var(--muted-foreground)" }}>{destination?.city}</p>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* AI Dispatcher — only for failed orders */}
+          {order.status === "FAILED" && failedStop && (
+            <AIDispatcher
+              stopId={failedStop.id}
+              failureReason={failedStop.failureReason ?? ""}
+            />
+          )}
 
           {/* Shipment Events */}
           {order.shipments.length > 0 && (
@@ -129,9 +128,7 @@ export default async function OrderDetailPage({
                 Tracking Timeline
               </h2>
               {order.shipments[0].events.length === 0 ? (
-                <p style={{ color: "var(--muted-foreground)" }}>
-                  No tracking events yet.
-                </p>
+                <p style={{ color: "var(--muted-foreground)" }}>No tracking events yet.</p>
               ) : (
                 <div className="space-y-4">
                   {order.shipments[0].events.map((event) => (
@@ -152,15 +149,38 @@ export default async function OrderDetailPage({
               )}
             </div>
           )}
-        </div>
-{order.status === "FAILED" && order.shipments[0] && (
-  <AIDispatcher
-    stopId={order.shipments[0].stops?.[0]?.id ?? ""}
-    failureReason={order.shipments[0].failureReason ?? ""}
-  />
-)}
 
-        {/* Right column */}
+          {/* POD Photos */}
+          {order.shipments[0]?.stops?.some((s) => s.podPhotoUrl) && (
+            <div
+              className="rounded-2xl p-6"
+              style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+            >
+              <h2 className="text-lg font-semibold text-white mb-4">
+                Proof of Delivery
+              </h2>
+              <div className="grid grid-cols-2 gap-3">
+                {order.shipments[0].stops
+                  .filter((s) => s.podPhotoUrl)
+                  .map((stop) => (
+                    <div key={stop.id}>
+                      <img
+                        src={stop.podPhotoUrl!}
+                        alt={`Stop ${stop.sequence} POD`}
+                        className="w-full h-40 object-cover rounded-xl"
+                      />
+                      <p className="text-xs mt-1 text-center"
+                        style={{ color: "var(--muted-foreground)" }}>
+                        Stop {stop.sequence}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right */}
         <div className="space-y-6">
           {/* Recipient */}
           <div
@@ -203,11 +223,25 @@ export default async function OrderDetailPage({
                   <span className="text-white font-medium">{order.weightKg} kg</span>
                 </div>
               )}
+              {order.distanceKm && (
+                <div className="flex justify-between">
+                  <span style={{ color: "var(--muted-foreground)" }}>Distance</span>
+                  <span className="text-white font-medium">{order.distanceKm} km</span>
+                </div>
+              )}
+              {order.deliveryFee && (
+                <div className="flex justify-between">
+                  <span style={{ color: "var(--muted-foreground)" }}>Delivery Fee</span>
+                  <span className="font-bold" style={{ color: "var(--gold)" }}>
+                    R{Number(order.deliveryFee).toFixed(2)}
+                  </span>
+                </div>
+              )}
               {order.declaredValue && (
                 <div className="flex justify-between">
                   <span style={{ color: "var(--muted-foreground)" }}>Value</span>
                   <span className="text-white font-medium">
-                    R {Number(order.declaredValue).toFixed(2)}
+                    R{Number(order.declaredValue).toFixed(2)}
                   </span>
                 </div>
               )}
