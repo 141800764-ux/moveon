@@ -12,16 +12,28 @@ export async function GET() {
     const orders = await prisma.order.findMany({
       where: {
         status: "CONFIRMED",
-        bids: { none: { status: "ACCEPTED" } },
       },
-      include: {
-        bids: true,
+      select: {
+        id: true,
+        trackingNumber: true,
+        status: true,
+        recipientName: true,
+        recipientPhone: true,
+        origin: true,
+        destination: true,
+        distanceKm: true,
+        deliveryFee: true,
+        driverPayout: true,
+        platformFee: true,
+        serviceLevel: true,
+        createdAt: true,
       },
       orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({ success: true, orders });
   } catch (error) {
+    console.error("[GET /api/orders/available]", error);
     return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }
