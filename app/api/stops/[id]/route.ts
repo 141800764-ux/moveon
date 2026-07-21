@@ -26,7 +26,13 @@ export async function GET(
         shipment: {
           include: {
             order: {
-              select: { driverPayout: true },
+              select: {
+                driverPayout: true,
+                origin: true,
+                destination: true,
+                recipientName: true,
+                recipientPhone: true,
+              },
             },
           },
         },

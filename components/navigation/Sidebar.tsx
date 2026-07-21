@@ -39,6 +39,7 @@ const navItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
   { href: "/dashboard/map", label: "Live Map", icon: Map },
   { href: "/dashboard/chat", label: "Customer Chat", icon: MessageSquare },
+  { href: "/dashboard/become-driver", label: "Become a Driver", icon: Truck },
 ];
 
 const adminNavItems = [
