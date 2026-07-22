@@ -43,7 +43,7 @@ export async function GET() {
 
     return NextResponse.json({ success: true, admins });
   } catch (error) {
-    console.error("[GET /api/chat/admins]", error);
+    console.error("[GET /api/chat/admin]", error);
     return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }

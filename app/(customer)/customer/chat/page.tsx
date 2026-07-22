@@ -16,7 +16,7 @@ export default function CustomerChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/chat/admins")
+    fetch("/api/chat/admin")
       .then((r) => r.json())
       .then((d) => {
         const adminList = d.admins || [];
