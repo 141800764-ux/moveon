@@ -9,28 +9,36 @@ export async function GET() {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // Get ALL non-customer users as potential support agents
+    // Get all users who are NOT customers and NOT the current user
     const admins = await prisma.user.findMany({
       where: {
-        role: {
-          notIn: ["CUSTOMER", "DRIVER"],
-        },
+        id: { not: session.user.id },
+        role: { not: "CUSTOMER" },
       },
-      select: { id: true, name: true, image: true, role: true },
+      select: {
+        id: true,
+        name: true,
+        image: true,
+        role: true,
+      },
       take: 10,
     });
 
-    // If still none found, get any user who is not the current user
+    // If still empty, get any other user at all
     if (admins.length === 0) {
-      const fallback = await prisma.user.findMany({
+      const anyone = await prisma.user.findMany({
         where: {
           id: { not: session.user.id },
-          role: { not: "CUSTOMER" },
         },
-        select: { id: true, name: true, image: true, role: true },
+        select: {
+          id: true,
+          name: true,
+          image: true,
+          role: true,
+        },
         take: 5,
       });
-      return NextResponse.json({ success: true, admins: fallback });
+      return NextResponse.json({ success: true, admins: anyone });
     }
 
     return NextResponse.json({ success: true, admins });

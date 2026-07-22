@@ -21,23 +21,26 @@ export async function GET(
   try {
     const { id } = await params;
     const stop = await prisma.stop.findUnique({
-      where: { id },
+  where: { id },
+  include: {
+    shipment: {
       include: {
-        shipment: {
-          include: {
-            order: {
-              select: {
-                driverPayout: true,
-                origin: true,
-                destination: true,
-                recipientName: true,
-                recipientPhone: true,
-              },
-            },
+        order: {
+          select: {
+            driverPayout: true,
+            deliveryFee: true,
+            platformFee: true,
+            origin: true,
+            destination: true,
+            recipientName: true,
+            recipientPhone: true,
+            payment: true,
           },
         },
       },
-    });
+    },
+  },
+});
     if (!stop) {
       return NextResponse.json({ message: "Not found" }, { status: 404 });
     }

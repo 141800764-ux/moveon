@@ -282,6 +282,70 @@ export default function StopDetailPage() {
           </div>
         </div>
       )}
+      {/* Payment info */}
+{stop.shipment?.order?.payment && (
+  <div
+    className="rounded-xl p-4 space-y-2"
+    style={{
+      background: stop.shipment.order.payment.method === "CASH"
+        ? "rgba(239,68,68,0.1)"
+        : "rgba(16,185,129,0.1)",
+      border: stop.shipment.order.payment.method === "CASH"
+        ? "1px solid rgba(239,68,68,0.4)"
+        : "1px solid rgba(16,185,129,0.4)",
+    }}
+  >
+    <div className="flex items-center justify-between">
+      <p
+        className="font-bold text-sm"
+        style={{
+          color: stop.shipment.order.payment.method === "CASH"
+            ? "#ef4444"
+            : "#10b981",
+        }}
+      >
+        {stop.shipment.order.payment.method === "CASH"
+          ? "💵 CASH PAYMENT"
+          : "💳 CARD PAYMENT"}
+      </p>
+      <span
+        className="text-xs font-semibold px-2 py-0.5 rounded-full"
+        style={{
+          background: stop.shipment.order.payment.status === "PAID"
+            ? "rgba(16,185,129,0.2)"
+            : "rgba(234,179,8,0.2)",
+          color: stop.shipment.order.payment.status === "PAID"
+            ? "#10b981"
+            : "#eab308",
+        }}
+      >
+        {stop.shipment.order.payment.status}
+      </span>
+    </div>
+
+    {stop.shipment.order.payment.method === "CASH" ? (
+      <div className="space-y-1">
+        <p className="text-white text-sm font-semibold">
+          ⚠️ Collect R{Number(stop.shipment.order.deliveryFee ?? 0).toFixed(2)} cash from recipient
+        </p>
+        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+          Return R{Number(stop.shipment.order.platformFee ?? 0).toFixed(2)} (20%) to the office after delivery.
+          You keep R{Number(stop.shipment.order.driverPayout ?? 0).toFixed(2)} (80%).
+        </p>
+      </div>
+    ) : (
+      <div className="space-y-1">
+        <p className="text-white text-sm">
+          ✓ Customer paid by card
+        </p>
+        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+          Return R{Number(stop.shipment.order.platformFee ?? 0).toFixed(2)} (20%) to the office.
+          R{Number(stop.shipment.order.driverPayout ?? 0).toFixed(2)} will be paid to you weekly.
+        </p>
+      </div>
+    )}
+  </div>
+)}
 
       {/* Delivery step */}
       {pickedUp && stop.status === "PENDING" && (
