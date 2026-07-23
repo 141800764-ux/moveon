@@ -123,6 +123,42 @@ function SignInForm() {
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
+            <div className="space-y-1.5">
+  <div className="flex items-center justify-between">
+    <Label htmlFor="password" className="text-white">Password</Label>
+    <Link
+      href="/forgot-password"
+      className="text-xs hover:underline"
+      style={{ color: "var(--gold)" }}
+    >
+      Forgot password?
+    </Link>
+  </div>
+  <div className="relative">
+    <Input
+      id="password"
+      type={showPassword ? "text" : "password"}
+      autoComplete="current-password"
+      placeholder="••••••••"
+      value={form.password}
+      onChange={(e) => setForm({ ...form, password: e.target.value })}
+      required
+      style={{
+        background: "var(--input)",
+        border: "1px solid var(--border)",
+        color: "var(--foreground)",
+      }}
+    />
+    <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="absolute right-3 top-1/2 -translate-y-1/2"
+      style={{ color: "var(--muted-foreground)" }}
+    >
+      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+    </button>
+  </div>
+</div>
           </div>
         </div>
 

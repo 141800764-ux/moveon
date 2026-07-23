@@ -19,13 +19,21 @@ export async function POST(
     });
 
     if (!driver) {
-      return NextResponse.json({ message: "Driver profile not found" }, { status: 404 });
+      return NextResponse.json(
+        { message: "Driver profile not found. Please complete your profile first." },
+        { status: 404 }
+      );
     }
 
-    const order = await prisma.order.findUnique({ where: { id } });
+    const order = await prisma.order.findUnique({
+      where: { id },
+    });
 
     if (!order) {
-      return NextResponse.json({ message: "Order not found" }, { status: 404 });
+      return NextResponse.json(
+        { message: "Order not found" },
+        { status: 404 }
+      );
     }
 
     if (order.status !== "CONFIRMED") {
@@ -35,21 +43,25 @@ export async function POST(
       );
     }
 
-    // Create a shipment for this order linked to this driver
     let carrier = await prisma.carrier.findFirst();
     if (!carrier) {
       carrier = await prisma.carrier.create({
-        data: { name: "MoveOn Logistics", slug: "moveon", email: "ops@moveon.co.za" },
+        data: {
+          name: "MoveOn Logistics",
+          slug: "moveon",
+          email: "ops@moveon.co.za",
+        },
       });
     }
 
-    // Check if shipment already exists
-    const existingShipment = await prisma.shipment.findFirst({
+    // Check if shipment already exists for this order
+    let shipment = await prisma.shipment.findFirst({
       where: { orderId: id },
     });
 
-    if (!existingShipment) {
-      await prisma.shipment.create({
+    // Create shipment if it doesn't exist
+    if (!shipment) {
+      shipment = await prisma.shipment.create({
         data: {
           carrierId: carrier.id,
           orderId: id,
@@ -57,82 +69,102 @@ export async function POST(
           status: "IN_TRANSIT",
         },
       });
+    } else {
+      // Update existing shipment status
+      shipment = await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: { status: "IN_TRANSIT" },
+      });
     }
 
-    // Update order status to IN_TRANSIT
+    // Update order to IN_TRANSIT
     await prisma.order.update({
       where: { id },
       data: { status: "IN_TRANSIT" },
     });
 
-    // Create a route for this driver with this order
-    const hub = await prisma.hub.findFirst({
+    // Get or create hub
+    let hub = await prisma.hub.findFirst({
       where: { carrierId: carrier.id },
     });
 
-    if (hub) {
-      const destinationCoords = {
-        lat: order.destinationLat ?? 0,
-        lng: order.destinationLng ?? 0,
-      };
-
-      const destination = order.destination as any;
-
-      await prisma.route.create({
+    if (!hub) {
+      hub = await prisma.hub.create({
         data: {
           carrierId: carrier.id,
-          hubId: hub.id,
-          driverId: driver.id,
-          date: new Date(),
-          status: "IN_PROGRESS",
-          stops: {
-            create: [
-              {
-                sequence: 1,
-                type: "DELIVERY",
-                address: {
-                  address: destination?.address || "",
-                  city: destination?.city || "",
-                },
-                latitude: destinationCoords.lat,
-                longitude: destinationCoords.lng,
-                contactName: order.recipientName,
-                contactPhone: order.recipientPhone,
-                shipmentId: existingShipment?.id,
-                status: "PENDING",
+          name: "MoveOn Hub",
+          code: "MOH001",
+          type: "DEPOT",
+          address: { address: "Main Hub", city: "Cape Town" },
+          latitude: -33.9249,
+          longitude: 18.4241,
+        },
+      });
+    }
+
+    // Parse addresses from the order
+    const originData = order.origin as any;
+    const destinationData = order.destination as any;
+
+    // Create route with TWO stops — pickup first, then delivery
+    const route = await prisma.route.create({
+      data: {
+        carrierId: carrier.id,
+        hubId: hub.id,
+        driverId: driver.id,
+        date: new Date(),
+        status: "IN_PROGRESS",
+        stops: {
+          create: [
+            // Stop 1 — Pickup
+            {
+              sequence: 1,
+              type: "PICKUP",
+              address: {
+                address: originData?.address || "",
+                city: originData?.city || "",
               },
-            ],
-          },
+              latitude: order.originLat ?? 0,
+              longitude: order.originLng ?? 0,
+              contactName: null,
+              contactPhone: null,
+              shipmentId: shipment.id,
+              status: "PENDING",
+              notes: "Collect package from sender",
+            },
+            // Stop 2 — Delivery
+            {
+              sequence: 2,
+              type: "DELIVERY",
+              address: {
+                address: destinationData?.address || "",
+                city: destinationData?.city || "",
+              },
+              latitude: order.destinationLat ?? 0,
+              longitude: order.destinationLng ?? 0,
+              contactName: order.recipientName,
+              contactPhone: order.recipientPhone,
+              shipmentId: shipment.id,
+              status: "PENDING",
+            },
+          ],
         },
-      });
-    }
+      },
+      include: {
+        stops: true,
+      },
+    });
 
-    // Record driver earnings
-    if (order.driverPayout) {
-      const now = new Date();
-      const day = now.getDay();
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - day);
-      weekStart.setHours(0, 0, 0, 0);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
-      weekEnd.setHours(23, 59, 59, 999);
-
-      await prisma.driverEarning.create({
-        data: {
-          driverId: driver.id,
-          orderId: id,
-          amount: order.driverPayout,
-          weekStart,
-          weekEnd,
-          isPaid: false,
-        },
-      });
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
+    return NextResponse.json({
+      success: true,
+      routeId: route.id,
+      stops: route.stops.length,
+    });
+  } catch (error: any) {
     console.error("[POST /api/orders/[id]/bid]", error);
-    return NextResponse.json({ message: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { message: error?.message || "Server error" },
+      { status: 500 }
+    );
   }
 }
