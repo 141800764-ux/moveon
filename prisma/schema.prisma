@@ -71,6 +71,7 @@ model User {
   reviewedDrivers    Driver[]         @relation("DriverReviewer")
   sentMessages     ChatMessage[] @relation("SentMessages")
   receivedMessages ChatMessage[] @relation("ReceivedMessages") 
+  passwordResetTokens PasswordResetToken[]
 }
 
 enum UserRole {
