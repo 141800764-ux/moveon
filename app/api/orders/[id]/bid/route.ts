@@ -20,13 +20,14 @@ export async function POST(
 
     if (!driver) {
       return NextResponse.json(
-        { message: "Driver profile not found. Please complete your profile first." },
+        { message: "Driver profile not found" },
         { status: 404 }
       );
     }
 
     const order = await prisma.order.findUnique({
       where: { id },
+      include: { payment: true },
     });
 
     if (!order) {
@@ -54,12 +55,11 @@ export async function POST(
       });
     }
 
-    // Check if shipment already exists for this order
+    // Check if shipment already exists
     let shipment = await prisma.shipment.findFirst({
       where: { orderId: id },
     });
 
-    // Create shipment if it doesn't exist
     if (!shipment) {
       shipment = await prisma.shipment.create({
         data: {
@@ -70,14 +70,13 @@ export async function POST(
         },
       });
     } else {
-      // Update existing shipment status
       shipment = await prisma.shipment.update({
         where: { id: shipment.id },
         data: { status: "IN_TRANSIT" },
       });
     }
 
-    // Update order to IN_TRANSIT
+    // Update order status
     await prisma.order.update({
       where: { id },
       data: { status: "IN_TRANSIT" },
@@ -92,7 +91,7 @@ export async function POST(
       hub = await prisma.hub.create({
         data: {
           carrierId: carrier.id,
-          name: "MoveOn Hub",
+          name: "MoveOn Main Hub",
           code: "MOH001",
           type: "DEPOT",
           address: { address: "Main Hub", city: "Cape Town" },
@@ -102,11 +101,11 @@ export async function POST(
       });
     }
 
-    // Parse addresses from the order
     const originData = order.origin as any;
     const destinationData = order.destination as any;
 
-    // Create route with TWO stops — pickup first, then delivery
+    // Create route with 2 stops — PICKUP then DELIVERY
+    // Both stops linked to same shipment so order data is accessible
     const route = await prisma.route.create({
       data: {
         carrierId: carrier.id,
@@ -116,12 +115,11 @@ export async function POST(
         status: "IN_PROGRESS",
         stops: {
           create: [
-            // Stop 1 — Pickup
             {
               sequence: 1,
               type: "PICKUP",
               address: {
-                address: originData?.address || "",
+                address: originData?.address || "Pickup address",
                 city: originData?.city || "",
               },
               latitude: order.originLat ?? 0,
@@ -130,14 +128,13 @@ export async function POST(
               contactPhone: null,
               shipmentId: shipment.id,
               status: "PENDING",
-              notes: "Collect package from sender",
+              notes: `Pickup for order ${order.trackingNumber}`,
             },
-            // Stop 2 — Delivery
             {
               sequence: 2,
               type: "DELIVERY",
               address: {
-                address: destinationData?.address || "",
+                address: destinationData?.address || "Delivery address",
                 city: destinationData?.city || "",
               },
               latitude: order.destinationLat ?? 0,
@@ -146,19 +143,19 @@ export async function POST(
               contactPhone: order.recipientPhone,
               shipmentId: shipment.id,
               status: "PENDING",
+              notes: null,
             },
           ],
         },
       },
-      include: {
-        stops: true,
-      },
+      include: { stops: true },
     });
 
     return NextResponse.json({
       success: true,
       routeId: route.id,
       stops: route.stops.length,
+      message: "Order accepted successfully",
     });
   } catch (error: any) {
     console.error("[POST /api/orders/[id]/bid]", error);

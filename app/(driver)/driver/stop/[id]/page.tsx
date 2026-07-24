@@ -31,9 +31,10 @@ export default function StopDetailPage() {
       .then((data) => {
         setStop(data.stop);
         setLoading(false);
-        // If this is already a DELIVERY type stop (not pickup), skip to delivery step
-        if (data.stop?.type === "DELIVERY") {
-          setPickedUp(true);
+        // If this is a DELIVERY stop, show pickup step first
+        // If this is a PICKUP stop, show pickup UI directly
+        if (data.stop?.type === "PICKUP") {
+          setPickedUp(false);
         }
       })
       .catch(() => setLoading(false));
@@ -62,13 +63,20 @@ export default function StopDetailPage() {
     }
   }
 
-  function openNavigation(lat?: number, lng?: number, address?: string, city?: string) {
-    if (lat && lng && lat !== 0 && lng !== 0) {
+  function openNavigation(
+    lat: number | null | undefined,
+    lng: number | null | undefined,
+    address: string | undefined,
+    city: string | undefined
+  ) {
+    // Use coordinates if available and valid
+    if (lat && lng && Math.abs(lat) > 0.001 && Math.abs(lng) > 0.001) {
       window.open(
         `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`,
         "_blank"
       );
-    } else if (address || city) {
+    } else {
+      // Fall back to address text search
       const query = encodeURIComponent(
         `${address || ""} ${city || ""} South Africa`.trim()
       );
@@ -79,51 +87,34 @@ export default function StopDetailPage() {
     }
   }
 
-  function navigateToPickup() {
-    const order = stop?.shipment?.order;
-    const origin = order?.origin as any;
-    openNavigation(
-      order?.originLat,
-      order?.originLng,
-      origin?.address,
-      origin?.city
-    );
-  }
-
-  function navigateToDelivery() {
-    const addr = stop?.address as any;
-    openNavigation(
-      stop?.latitude,
-      stop?.longitude,
-      addr?.address,
-      addr?.city
-    );
-  }
-
-  async function markPickupStop() {
-    // If this is a PICKUP type stop, mark it complete and go to delivery
+  async function handlePickupComplete() {
+    // Mark the PICKUP stop as completed and go back to route
     if (stop?.type === "PICKUP") {
       setUpdating(true);
       try {
-        await fetch(`/api/stops/${params.id}`, {
+        const res = await fetch(`/api/stops/${params.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             status: "COMPLETED",
             actualArrivalAt: new Date().toISOString(),
-            notes: "Package collected",
+            notes: "Package collected from sender",
           }),
         });
-        // Go back to driver home to see next stop
-        toast.success("Package collected! Proceed to delivery stop.");
+        if (!res.ok) {
+          toast.error("Failed to confirm pickup");
+          return;
+        }
+        toast.success("Package collected! Check your route for the delivery stop.");
         router.push("/driver");
+        router.refresh();
       } catch {
         toast.error("Something went wrong");
       } finally {
         setUpdating(false);
       }
     } else {
-      // If it's a single DELIVERY stop, just show the delivery flow
+      // DELIVERY stop — just advance to delivery step
       setPickedUp(true);
     }
   }
@@ -156,7 +147,9 @@ export default function StopDetailPage() {
       }
 
       toast.success(
-        status === "COMPLETED" ? "Delivery confirmed!" : "Stop marked as failed"
+        status === "COMPLETED"
+          ? "Delivery confirmed! Well done!"
+          : "Stop marked as failed"
       );
       router.push("/driver");
       router.refresh();
@@ -187,11 +180,14 @@ export default function StopDetailPage() {
 
   if (!stop) {
     return (
-      <div className="py-20 text-center space-y-3">
+      <div className="py-20 text-center space-y-4">
         <p className="text-white font-semibold">Stop not found</p>
         <Link href="/driver">
-          <Button style={{ background: "var(--gold)" }} className="text-white">
-            Back to route
+          <Button
+            className="font-semibold text-white"
+            style={{ background: "var(--gold)" }}
+          >
+            Back to Route
           </Button>
         </Link>
       </div>
@@ -201,9 +197,33 @@ export default function StopDetailPage() {
   const stopAddress = stop.address as any;
   const order = stop.shipment?.order;
   const origin = order?.origin as any;
+  const destination = order?.destination as any;
   const payment = order?.payment;
   const isPickupStop = stop.type === "PICKUP";
   const isDeliveryStop = stop.type === "DELIVERY";
+
+  // For DELIVERY stops — pickup address comes from order.origin
+  // For PICKUP stops — the stop address IS the pickup address
+  const pickupAddress = isPickupStop
+    ? stopAddress
+    : origin;
+  const pickupLat = isPickupStop
+    ? stop.latitude
+    : order?.originLat;
+  const pickupLng = isPickupStop
+    ? stop.longitude
+    : order?.originLng;
+
+  // Delivery address
+  const deliveryAddress = isDeliveryStop
+    ? stopAddress
+    : destination;
+  const deliveryLat = isDeliveryStop
+    ? stop.latitude
+    : order?.destinationLat;
+  const deliveryLng = isDeliveryStop
+    ? stop.longitude
+    : order?.destinationLng;
 
   return (
     <div className="space-y-5 py-8">
@@ -222,7 +242,7 @@ export default function StopDetailPage() {
             Stop {stop.sequence}
           </h1>
           <p
-            className="text-sm mt-0.5 uppercase font-semibold"
+            className="text-sm mt-0.5 font-semibold uppercase tracking-wider"
             style={{ color: "var(--gold)" }}
           >
             {stop.type}
@@ -230,8 +250,8 @@ export default function StopDetailPage() {
         </div>
       </div>
 
-      {/* Step indicator — only show for DELIVERY stops that need pickup first */}
-      {isDeliveryStop && stop.status === "PENDING" && (
+      {/* Progress steps — show for all pending stops */}
+      {stop.status === "PENDING" && (
         <div className="flex items-center gap-2">
           <div
             className="flex-1 flex items-center gap-2 p-3 rounded-xl"
@@ -247,7 +267,7 @@ export default function StopDetailPage() {
             <div
               className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
               style={{
-                background: pickedUp ? "#10b981" : "var(--gold)",
+                background: !pickedUp ? "var(--gold)" : "#10b981",
                 color: "white",
               }}
             >
@@ -256,15 +276,17 @@ export default function StopDetailPage() {
             <p
               className="text-sm font-medium"
               style={{
-                color: pickedUp ? "#10b981" : "var(--gold)",
+                color: !pickedUp ? "var(--gold)" : "#10b981",
               }}
             >
-              Pickup package
+              Pickup
             </p>
           </div>
           <div
-            className="w-8 h-0.5 shrink-0"
-            style={{ background: pickedUp ? "#10b981" : "var(--border)" }}
+            className="w-6 h-0.5 shrink-0"
+            style={{
+              background: pickedUp ? "#10b981" : "var(--border)",
+            }}
           />
           <div
             className="flex-1 flex items-center gap-2 p-3 rounded-xl"
@@ -289,9 +311,7 @@ export default function StopDetailPage() {
             <p
               className="text-sm font-medium"
               style={{
-                color: pickedUp
-                  ? "#10b981"
-                  : "var(--muted-foreground)",
+                color: pickedUp ? "#10b981" : "var(--muted-foreground)",
               }}
             >
               Deliver
@@ -300,29 +320,53 @@ export default function StopDetailPage() {
         </div>
       )}
 
-      {/* PICKUP STOP */}
-      {isPickupStop && stop.status === "PENDING" && (
+      {/* ===== STEP 1: PICKUP ===== */}
+      {stop.status === "PENDING" && !pickedUp && (
         <div
           className="rounded-2xl p-5 space-y-4"
-          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+          style={{
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+          }}
         >
           <div className="flex items-center gap-2">
             <Package size={18} style={{ color: "var(--gold)" }} />
-            <h2 className="font-semibold text-white">Pickup Address</h2>
+            <h2 className="font-semibold text-white">
+              {isPickupStop ? "Pickup Package" : "Step 1 — Collect Package"}
+            </h2>
           </div>
 
+          {/* Pickup address */}
           <div
             className="rounded-xl p-4"
             style={{ background: "var(--background)" }}
           >
-            <p className="text-white font-semibold text-lg">
-              {stopAddress?.address}
+            <p
+              className="text-xs font-semibold uppercase tracking-wider mb-2"
+              style={{ color: "var(--gold)" }}
+            >
+              📍 Pickup Address
             </p>
-            <p style={{ color: "var(--muted-foreground)" }}>
-              {stopAddress?.city}
-            </p>
+            {pickupAddress ? (
+              <>
+                <p className="text-white font-semibold text-base">
+                  {pickupAddress?.address || "Address not available"}
+                </p>
+                <p
+                  className="mt-0.5"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  {pickupAddress?.city || ""}
+                </p>
+              </>
+            ) : (
+              <p style={{ color: "var(--muted-foreground)" }}>
+                No pickup address available
+              </p>
+            )}
           </div>
 
+          {/* Order summary */}
           {order && (
             <div
               className="rounded-xl p-4 space-y-2"
@@ -331,18 +375,18 @@ export default function StopDetailPage() {
                 border: "1px solid rgba(200,146,42,0.2)",
               }}
             >
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span
                   className="text-sm"
                   style={{ color: "var(--muted-foreground)" }}
                 >
                   Delivering to
                 </span>
-                <span className="text-white text-sm font-medium">
+                <span className="text-white font-medium text-sm">
                   {order.recipientName}
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span
                   className="text-sm"
                   style={{ color: "var(--muted-foreground)" }}
@@ -350,7 +394,7 @@ export default function StopDetailPage() {
                   Your earnings
                 </span>
                 <span
-                  className="font-bold"
+                  className="font-bold text-lg"
                   style={{ color: "var(--gold)" }}
                 >
                   R{Number(order.driverPayout ?? 0).toFixed(2)}
@@ -375,193 +419,27 @@ export default function StopDetailPage() {
               }}
             >
               <p
-                className="font-bold text-sm mb-2"
+                className="font-bold text-sm mb-3"
                 style={{
-                  color:
-                    payment.method === "CASH" ? "#ef4444" : "#10b981",
-                }}
-              >
-                {payment.method === "CASH"
-                  ? "💵 CASH COLLECTION REQUIRED"
-                  : "💳 CARD PAYMENT — Already Paid"}
-              </p>
-              {payment.method === "CASH" ? (
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span style={{ color: "var(--muted-foreground)" }}>
-                      Collect from recipient
-                    </span>
-                    <span className="text-white font-bold">
-                      R{Number(order?.deliveryFee ?? 0).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span style={{ color: "var(--muted-foreground)" }}>
-                      Return to office
-                    </span>
-                    <span style={{ color: "#ef4444" }}>
-                      R{Number(order?.platformFee ?? 0).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span style={{ color: "var(--muted-foreground)" }}>
-                      You keep
-                    </span>
-                    <span style={{ color: "var(--gold)" }}>
-                      R{Number(order?.driverPayout ?? 0).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span style={{ color: "var(--muted-foreground)" }}>
-                      Return to office
-                    </span>
-                    <span style={{ color: "#ef4444" }}>
-                      R{Number(order?.platformFee ?? 0).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span style={{ color: "var(--muted-foreground)" }}>
-                      Weekly payout to you
-                    </span>
-                    <span style={{ color: "var(--gold)" }}>
-                      R{Number(order?.driverPayout ?? 0).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <Button
-            onClick={navigateToPickup}
-            className="w-full font-semibold text-white flex items-center gap-2"
-            style={{ background: "var(--gold)" }}
-          >
-            <Navigation size={16} />
-            Navigate to Pickup
-          </Button>
-
-          <Button
-            onClick={markPickupStop}
-            disabled={updating}
-            className="w-full font-semibold text-white flex items-center gap-2"
-            style={{ background: "#3b82f6" }}
-          >
-            {updating ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Package size={16} />
-            )}
-            Package Collected — Go to Delivery
-          </Button>
-        </div>
-      )}
-
-      {/* DELIVERY STOP — Step 1: Pickup phase */}
-      {isDeliveryStop && !pickedUp && stop.status === "PENDING" && (
-        <div
-          className="rounded-2xl p-5 space-y-4"
-          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
-        >
-          <div className="flex items-center gap-2">
-            <Package size={18} style={{ color: "var(--gold)" }} />
-            <h2 className="font-semibold text-white">
-              Step 1 — Pickup Package
-            </h2>
-          </div>
-
-          {/* Pickup address from order origin */}
-          <div
-            className="rounded-xl p-4"
-            style={{ background: "var(--background)" }}
-          >
-            <p
-              className="text-xs font-semibold uppercase mb-2"
-              style={{ color: "var(--gold)" }}
-            >
-              Pickup Address
-            </p>
-            {origin ? (
-              <>
-                <p className="text-white font-semibold">
-                  {origin?.address}
-                </p>
-                <p style={{ color: "var(--muted-foreground)" }}>
-                  {origin?.city}
-                </p>
-              </>
-            ) : (
-              <p style={{ color: "var(--muted-foreground)" }}>
-                No pickup address on file
-              </p>
-            )}
-          </div>
-
-          {/* Earnings */}
-          {order?.driverPayout != null && (
-            <div
-              className="flex justify-between items-center p-3 rounded-xl"
-              style={{
-                background: "rgba(200,146,42,0.08)",
-                border: "1px solid rgba(200,146,42,0.2)",
-              }}
-            >
-              <span
-                className="text-sm"
-                style={{ color: "var(--muted-foreground)" }}
-              >
-                Your earnings
-              </span>
-              <span
-                className="font-bold text-lg"
-                style={{ color: "var(--gold)" }}
-              >
-                R{Number(order.driverPayout).toFixed(2)}
-              </span>
-            </div>
-          )}
-
-          {/* Payment info */}
-          {payment && (
-            <div
-              className="rounded-xl p-4"
-              style={{
-                background:
-                  payment.method === "CASH"
-                    ? "rgba(239,68,68,0.08)"
-                    : "rgba(16,185,129,0.08)",
-                border:
-                  payment.method === "CASH"
-                    ? "1px solid rgba(239,68,68,0.3)"
-                    : "1px solid rgba(16,185,129,0.3)",
-              }}
-            >
-              <p
-                className="font-bold text-sm mb-2"
-                style={{
-                  color:
-                    payment.method === "CASH" ? "#ef4444" : "#10b981",
+                  color: payment.method === "CASH" ? "#ef4444" : "#10b981",
                 }}
               >
                 {payment.method === "CASH"
                   ? "💵 CASH — Collect from recipient"
-                  : "💳 CARD — Already paid"}
+                  : "💳 CARD — Already paid online"}
               </p>
-              <div className="space-y-1 text-sm">
+              <div className="space-y-1.5">
                 {payment.method === "CASH" && (
-                  <div className="flex justify-between">
+                  <div className="flex justify-between text-sm">
                     <span style={{ color: "var(--muted-foreground)" }}>
-                      Collect
+                      Total to collect
                     </span>
                     <span className="text-white font-bold">
                       R{Number(order?.deliveryFee ?? 0).toFixed(2)}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm">
                   <span style={{ color: "var(--muted-foreground)" }}>
                     Return to office (20%)
                   </span>
@@ -569,9 +447,11 @@ export default function StopDetailPage() {
                     R{Number(order?.platformFee ?? 0).toFixed(2)}
                   </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm">
                   <span style={{ color: "var(--muted-foreground)" }}>
-                    You keep (80%)
+                    {payment.method === "CASH"
+                      ? "You keep (80%)"
+                      : "Weekly payout (80%)"}
                   </span>
                   <span style={{ color: "var(--gold)" }}>
                     R{Number(order?.driverPayout ?? 0).toFixed(2)}
@@ -581,8 +461,16 @@ export default function StopDetailPage() {
             </div>
           )}
 
+          {/* Navigate to pickup */}
           <Button
-            onClick={navigateToPickup}
+            onClick={() =>
+              openNavigation(
+                pickupLat,
+                pickupLng,
+                pickupAddress?.address,
+                pickupAddress?.city
+              )
+            }
             className="w-full font-semibold text-white flex items-center gap-2"
             style={{ background: "var(--gold)" }}
           >
@@ -590,24 +478,35 @@ export default function StopDetailPage() {
             Navigate to Pickup Address
           </Button>
 
+          {/* Confirm collected */}
           <Button
-            onClick={() => setPickedUp(true)}
-            className="w-full font-semibold text-white flex items-center gap-2"
+            onClick={handlePickupComplete}
+            disabled={updating}
+            className="w-full font-semibold text-white flex items-center justify-center gap-2"
             style={{ background: "#3b82f6" }}
           >
-            <Package size={16} />
-            Package Collected — Proceed to Delivery
+            {updating ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Package size={16} />
+            )}
+            {updating
+              ? "Confirming..."
+              : "Package Collected — Proceed to Delivery"}
           </Button>
         </div>
       )}
 
-      {/* DELIVERY STOP — Step 2: Delivery phase */}
-      {isDeliveryStop && pickedUp && stop.status === "PENDING" && (
+      {/* ===== STEP 2: DELIVERY ===== */}
+      {stop.status === "PENDING" && pickedUp && isDeliveryStop && (
         <div className="space-y-4">
-          {/* Delivery address */}
+          {/* Delivery address card */}
           <div
             className="rounded-2xl p-5 space-y-4"
-            style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+            }}
           >
             <div className="flex items-center gap-2">
               <MapPin size={18} style={{ color: "#10b981" }} />
@@ -621,25 +520,33 @@ export default function StopDetailPage() {
               style={{ background: "var(--background)" }}
             >
               <p
-                className="text-xs font-semibold uppercase mb-2"
+                className="text-xs font-semibold uppercase tracking-wider mb-2"
                 style={{ color: "#10b981" }}
               >
-                Delivery Address
+                📦 Delivery Address
               </p>
-              <p className="text-white font-semibold">
-                {stopAddress?.address}
+              <p className="text-white font-semibold text-base">
+                {deliveryAddress?.address || stopAddress?.address}
               </p>
-              <p style={{ color: "var(--muted-foreground)" }}>
-                {stopAddress?.city}
+              <p
+                className="mt-0.5"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                {deliveryAddress?.city || stopAddress?.city}
               </p>
               {stop.contactName && (
-                <p
-                  className="mt-2 text-sm"
-                  style={{ color: "var(--muted-foreground)" }}
+                <div
+                  className="mt-2 pt-2"
+                  style={{ borderTop: "1px solid var(--border)" }}
                 >
-                  {stop.contactName}
-                  {stop.contactPhone && ` · ${stop.contactPhone}`}
-                </p>
+                  <p
+                    className="text-sm"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    {stop.contactName}
+                    {stop.contactPhone && ` · ${stop.contactPhone}`}
+                  </p>
+                </div>
               )}
             </div>
 
@@ -656,14 +563,21 @@ export default function StopDetailPage() {
                   className="text-sm font-semibold"
                   style={{ color: "#ef4444" }}
                 >
-                  ⚠️ Collect R{Number(order?.deliveryFee ?? 0).toFixed(2)} cash from{" "}
-                  {order?.recipientName}
+                  ⚠️ Collect R{Number(order?.deliveryFee ?? 0).toFixed(2)}{" "}
+                  cash from {order?.recipientName}
                 </p>
               </div>
             )}
 
             <Button
-              onClick={navigateToDelivery}
+              onClick={() =>
+                openNavigation(
+                  deliveryLat,
+                  deliveryLng,
+                  deliveryAddress?.address || stopAddress?.address,
+                  deliveryAddress?.city || stopAddress?.city
+                )
+              }
               className="w-full font-semibold text-white flex items-center gap-2"
               style={{ background: "#10b981" }}
             >
@@ -673,7 +587,7 @@ export default function StopDetailPage() {
 
             <button
               onClick={() => setPickedUp(false)}
-              className="w-full text-sm text-center py-2"
+              className="w-full text-sm text-center py-2 hover:opacity-80 transition"
               style={{ color: "var(--muted-foreground)" }}
             >
               ← Back to pickup step
@@ -683,7 +597,10 @@ export default function StopDetailPage() {
           {/* Delivery confirmation */}
           <div
             className="rounded-2xl p-5 space-y-4"
-            style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+            }}
           >
             <h2 className="font-semibold text-white">Confirm Delivery</h2>
 
@@ -729,7 +646,7 @@ export default function StopDetailPage() {
                     className="text-sm"
                     style={{ color: "var(--muted-foreground)" }}
                   >
-                    Take or upload a photo
+                    Tap to take or upload photo
                   </p>
                 </button>
               )}
@@ -769,7 +686,7 @@ export default function StopDetailPage() {
               />
             </div>
 
-            {/* Action buttons */}
+            {/* Delivered / Failed buttons */}
             <div className="grid grid-cols-2 gap-3">
               <Button
                 onClick={() => updateStop("COMPLETED")}
@@ -802,11 +719,14 @@ export default function StopDetailPage() {
         </div>
       )}
 
-      {/* Completed or Failed state */}
+      {/* ===== COMPLETED / FAILED STATE ===== */}
       {stop.status !== "PENDING" && (
         <div
           className="rounded-2xl p-6 text-center space-y-4"
-          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+          style={{
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+          }}
         >
           <div
             className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
@@ -818,20 +738,37 @@ export default function StopDetailPage() {
             }}
           >
             {stop.status === "COMPLETED" ? (
-              <CheckCircle size={32} style={{ color: "#10b981" }} />
+              <CheckCircle size={36} style={{ color: "#10b981" }} />
             ) : (
-              <XCircle size={32} style={{ color: "#ef4444" }} />
+              <XCircle size={36} style={{ color: "#ef4444" }} />
             )}
           </div>
-          <p
-            className="font-bold text-xl"
-            style={{
-              color:
-                stop.status === "COMPLETED" ? "#10b981" : "#ef4444",
-            }}
-          >
-            {stop.status === "COMPLETED" ? "Delivered!" : "Failed"}
-          </p>
+
+          <div>
+            <p
+              className="font-bold text-xl"
+              style={{
+                color:
+                  stop.status === "COMPLETED" ? "#10b981" : "#ef4444",
+              }}
+            >
+              {stop.status === "COMPLETED"
+                ? stop.type === "PICKUP"
+                  ? "Package Collected!"
+                  : "Delivered!"
+                : "Failed"}
+            </p>
+            {stop.type === "PICKUP" &&
+              stop.status === "COMPLETED" && (
+                <p
+                  className="text-sm mt-1"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Proceed to the delivery stop
+                </p>
+              )}
+          </div>
+
           {stop.podPhotoUrl && (
             <img
               src={stop.podPhotoUrl}
@@ -839,17 +776,24 @@ export default function StopDetailPage() {
               className="w-full h-48 object-cover rounded-xl"
             />
           )}
+
           {stop.notes && (
-            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+            <p
+              className="text-sm"
+              style={{ color: "var(--muted-foreground)" }}
+            >
               {stop.notes}
             </p>
           )}
+
           <Link href="/driver">
             <Button
               className="w-full font-semibold text-white"
               style={{ background: "var(--gold)" }}
             >
-              Back to Route
+              {stop.type === "PICKUP" && stop.status === "COMPLETED"
+                ? "Go to Delivery Stop →"
+                : "Back to Route"}
             </Button>
           </Link>
         </div>

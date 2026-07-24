@@ -5,9 +5,8 @@ import { prisma } from "@/lib/prisma";
 function getWeekBounds() {
   const now = new Date();
   const day = now.getDay();
-  const diff = now.getDate() - day;
   const weekStart = new Date(now);
-  weekStart.setDate(diff);
+  weekStart.setDate(now.getDate() - day);
   weekStart.setHours(0, 0, 0, 0);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
@@ -25,6 +24,25 @@ export async function GET(
     const stop = await prisma.stop.findUnique({
       where: { id },
       include: {
+        route: {
+          select: {
+            driverId: true,
+            stops: {
+              select: {
+                id: true,
+                sequence: true,
+                type: true,
+                status: true,
+                address: true,
+                latitude: true,
+                longitude: true,
+                contactName: true,
+                contactPhone: true,
+              },
+              orderBy: { sequence: "asc" },
+            },
+          },
+        },
         shipment: {
           include: {
             order: {
@@ -51,7 +69,7 @@ export async function GET(
     });
 
     if (!stop) {
-      return NextResponse.json({ message: "Not found" }, { status: 404 });
+      return NextResponse.json({ message: "Stop not found" }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, stop });
@@ -79,21 +97,27 @@ export async function PATCH(
       where: { id },
       data: {
         status,
-        notes,
-        failureReason,
+        notes: notes || undefined,
+        failureReason: failureReason || undefined,
         podPhotoUrl: podPhotoUrl || undefined,
-        actualArrivalAt: actualArrivalAt ? new Date(actualArrivalAt) : undefined,
+        actualArrivalAt: actualArrivalAt
+          ? new Date(actualArrivalAt)
+          : undefined,
       },
       include: {
+        route: { select: { driverId: true } },
         shipment: {
-          include: {
-            order: true,
-          },
+          include: { order: true },
         },
       },
     });
 
-    if (stop.shipmentId && (status === "COMPLETED" || status === "FAILED")) {
+    // Only cascade on DELIVERY stops — not PICKUP stops
+    if (
+      stop.shipmentId &&
+      stop.type === "DELIVERY" &&
+      (status === "COMPLETED" || status === "FAILED")
+    ) {
       const shipmentStatus = status === "COMPLETED" ? "DELIVERED" : "FAILED";
       const orderStatus = status === "COMPLETED" ? "DELIVERED" : "FAILED";
 
@@ -125,33 +149,52 @@ export async function PATCH(
         },
       });
 
-      if (status === "COMPLETED") {
-        const route = await prisma.route.findUnique({
-          where: { id: stop.routeId },
-          select: { driverId: true },
+      if (status === "COMPLETED" && stop.route?.driverId) {
+        await prisma.driver.update({
+          where: { id: stop.route.driverId },
+          data: { totalDeliveries: { increment: 1 } },
         });
 
-        if (route?.driverId) {
-          await prisma.driver.update({
-            where: { id: route.driverId },
-            data: { totalDeliveries: { increment: 1 } },
+        if (order.driverPayout) {
+          const { weekStart, weekEnd } = getWeekBounds();
+          await prisma.driverEarning.create({
+            data: {
+              driverId: stop.route.driverId,
+              orderId: order.id,
+              amount: order.driverPayout,
+              weekStart,
+              weekEnd,
+              isPaid: false,
+            },
           });
-
-          if (order.driverPayout) {
-            const { weekStart, weekEnd } = getWeekBounds();
-            await prisma.driverEarning.create({
-              data: {
-                driverId: route.driverId,
-                orderId: order.id,
-                amount: order.driverPayout,
-                weekStart,
-                weekEnd,
-                isPaid: false,
-              },
-            });
-          }
         }
       }
+    }
+
+    // If PICKUP stop completed — update shipment to IN_TRANSIT
+    if (
+      stop.shipmentId &&
+      stop.type === "PICKUP" &&
+      status === "COMPLETED"
+    ) {
+      await prisma.shipment.update({
+        where: { id: stop.shipmentId },
+        data: { status: "IN_TRANSIT" },
+      });
+
+      await prisma.shipmentEvent.create({
+        data: {
+          shipmentId: stop.shipmentId,
+          type: "PICKED_UP",
+          description: "Package picked up by driver",
+          actor: "DRIVER",
+        },
+      });
+
+      await prisma.order.update({
+        where: { id: stop.shipment!.orderId },
+        data: { status: "PICKED_UP" },
+      });
     }
 
     return NextResponse.json({ success: true, stop });
